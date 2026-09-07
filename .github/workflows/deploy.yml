@@ -30,7 +30,6 @@ jobs:
 
       - name: Install and Build
         run: |
-          cd "Loto Estadisticas Reductor"
           npm install --legacy-peer-deps || npm install
           npm run build
 
@@ -40,7 +39,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: './Loto Estadisticas Reductor/dist'
+          path: './dist'
 
       - name: Deploy to GitHub Pages
         id: deployment
