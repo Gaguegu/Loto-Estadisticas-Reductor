@@ -1,0 +1,6 @@
+{
+  "name": "LotoEstadísticas & Reductor",
+  "description": "Análisis estadístico de números más repetidos y generador de combinaciones reducidas para Lotería Primitiva, Bonoloto y Euromillones con desglose por días y exportación a PDF.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

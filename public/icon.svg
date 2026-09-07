@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e3a8a"/>
+      <stop offset="50%" stop-color="#1e40af"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="40%" stop-color="#eab308"/>
+      <stop offset="100%" stop-color="#ca8a04"/>
+    </linearGradient>
+    <linearGradient id="emeraldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6ee7b7"/>
+      <stop offset="50%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#047857"/>
+    </linearGradient>
+    <linearGradient id="rubyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fda4af"/>
+      <stop offset="50%" stop-color="#f43f5e"/>
+      <stop offset="100%" stop-color="#be123c"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  
+  <!-- Background with rounded corners -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)"/>
+  
+  <!-- Inner subtle border -->
+  <rect x="16" y="16" width="480" height="480" rx="96" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="3"/>
+  
+  <!-- Main Lottery Ball 1 (Ruby Red - Top Left) -->
+  <g filter="url(#shadow)">
+    <circle cx="190" cy="180" r="85" fill="url(#rubyGrad)"/>
+    <circle cx="165" cy="150" r="28" fill="white" opacity="0.25"/>
+    <circle cx="190" cy="180" r="50" fill="white"/>
+    <text x="190" y="196" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="44" fill="#be123c" text-anchor="middle">7</text>
+  </g>
+  
+  <!-- Main Lottery Ball 2 (Emerald Green - Right) -->
+  <g filter="url(#shadow)">
+    <circle cx="330" cy="240" r="95" fill="url(#emeraldGrad)"/>
+    <circle cx="300" cy="205" r="32" fill="white" opacity="0.25"/>
+    <circle cx="330" cy="240" r="55" fill="white"/>
+    <text x="330" y="258" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="48" fill="#047857" text-anchor="middle">23</text>
+  </g>
+  
+  <!-- Main Lottery Ball 3 (Gold - Bottom Left) -->
+  <g filter="url(#shadow)">
+    <circle cx="180" cy="340" r="88" fill="url(#goldGrad)"/>
+    <circle cx="150" cy="310" r="30" fill="white" opacity="0.3"/>
+    <circle cx="180" cy="340" r="52" fill="#1e293b"/>
+    <text x="180" y="356" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="46" fill="#fef08a" text-anchor="middle">49</text>
+  </g>
+  
+  <!-- Euromillions Star (Top Right) -->
+  <g filter="url(#shadow)">
+    <polygon points="380,95 393,126 426,128 401,149 408,181 380,164 352,181 359,149 334,128 367,126" fill="url(#goldGrad)"/>
+    <circle cx="380" cy="145" r="14" fill="#1e293b"/>
+    <text x="380" y="150" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="14" fill="#fef08a" text-anchor="middle">★</text>
+  </g>
+  
+  <!-- Small Star Sparkles -->
+  <polygon points="100,240 106,252 118,255 109,263 111,275 100,269 89,275 91,263 82,255 94,252" fill="#fbbf24" opacity="0.9"/>
+  <polygon points="410,360 415,370 426,372 418,380 420,390 410,385 400,390 402,380 394,372 405,370" fill="#fbbf24" opacity="0.8"/>
+</svg>
