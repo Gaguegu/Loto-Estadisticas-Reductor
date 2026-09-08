@@ -1,4 +1,5 @@
 import { LotteryDraw, GameType } from '../types';
+import { INITIAL_DRAWS, getMaxCelebratedDateForGame, sanitizeDraws, getMadridTime } from '../data/historicalDraws';
 
 const AUTO_SYNC_KEY = 'loto_auto_sync_enabled';
 
@@ -19,125 +20,52 @@ export function setAutoSyncPreference(enabled: boolean): void {
   }
 }
 
-const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-
 // Official draw day index (0 = Domingo, 1 = Lunes, ... 6 = Sábado)
-const OFFICIAL_DRAW_DAYS: Record<GameType, number[]> = {
-  primitiva: [1, 4, 6], // Lunes, Jueves, Sábado
-  bonoloto: [0, 1, 2, 3, 4, 5, 6], // Diario
-  euromillones: [2, 5], // Martes, Viernes
+export const OFFICIAL_DRAW_DAYS: Record<GameType, number[]> = {
+  primitiva: [1, 4, 6], // Lunes, Jueves, Sábado (21:40h)
+  bonoloto: [0, 1, 2, 3, 4, 5, 6], // Todos los días (21:30h)
+  euromillones: [2, 5], // Martes, Viernes (21:30h)
+};
+
+export const OFFICIAL_DRAW_HOURS: Record<GameType, string> = {
+  primitiva: '21:40h (Lunes, Jueves y Sábados)',
+  bonoloto: '21:30h (Diario, de Lunes a Domingo)',
+  euromillones: '21:30h (Martes y Viernes)',
 };
 
 /**
- * Returns a list of dates (YYYY-MM-DD) that were official draw days for a game
- * between the latest existing date and targetDate (inclusive).
+ * Returns a list of dates (YYYY-MM-DD) of verified official draws available in the system
+ * that are missing from the current active database.
+ * Strictly respects the official draw timetable in Europe/Madrid.
  */
-export function getPendingDrawDates(game: GameType, existingDraws: LotteryDraw[], targetDate: Date = new Date()): string[] {
+export function getPendingDrawDates(game: GameType, existingDraws: LotteryDraw[]): string[] {
   const gameDraws = existingDraws.filter((d) => d.game === game);
   const existingDates = new Set(gameDraws.map((d) => d.date));
+  const maxAllowedDateStr = getMaxCelebratedDateForGame(game);
 
-  // Find latest existing date
-  let latestDateStr = '2026-03-05';
-  if (gameDraws.length > 0) {
-    const sorted = [...gameDraws].sort((a, b) => b.date.localeCompare(a.date));
-    latestDateStr = sorted[0].date;
-  }
+  // Return dates of verified official draws that have taken place but are missing from the current list
+  const missingOfficialDates = INITIAL_DRAWS.filter(
+    (d) => d.game === game && d.date <= maxAllowedDateStr && !existingDates.has(d.date)
+  ).map((d) => d.date);
 
-  const cursor = new Date(latestDateStr + 'T00:00:00Z');
-  cursor.setDate(cursor.getDate() + 1); // Start from next day
-
-  const endStr = targetDate.toISOString().split('T')[0];
-  const targetMidnight = new Date(endStr + 'T00:00:00Z');
-
-  const pending: string[] = [];
-  const validDays = OFFICIAL_DRAW_DAYS[game];
-
-  while (cursor <= targetMidnight) {
-    const dayOfWeek = cursor.getUTCDay();
-    const dateStr = cursor.toISOString().split('T')[0];
-
-    if (validDays.includes(dayOfWeek) && !existingDates.has(dateStr)) {
-      pending.push(dateStr);
-    }
-
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  return pending;
+  return missingOfficialDates;
 }
 
 /**
- * Count total missing draws across all 3 games up to today
+ * Count total missing celebrated draws across all 3 games up to the current moment.
  */
-export function countMissingDraws(draws: LotteryDraw[], targetDate: Date = new Date()): {
+export function countMissingDraws(draws: LotteryDraw[]): {
   totalMissing: number;
   byGame: Record<GameType, number>;
 } {
   const byGame: Record<GameType, number> = {
-    primitiva: getPendingDrawDates('primitiva', draws, targetDate).length,
-    bonoloto: getPendingDrawDates('bonoloto', draws, targetDate).length,
-    euromillones: getPendingDrawDates('euromillones', draws, targetDate).length,
+    primitiva: getPendingDrawDates('primitiva', draws).length,
+    bonoloto: getPendingDrawDates('bonoloto', draws).length,
+    euromillones: getPendingDrawDates('euromillones', draws).length,
   };
 
   const totalMissing = byGame.primitiva + byGame.bonoloto + byGame.euromillones;
   return { totalMissing, byGame };
-}
-
-/**
- * Deterministic or uniform pseudo-random number generator for lottery draws
- */
-function generateRandomPicks(count: number, max: number): number[] {
-  const chosen = new Set<number>();
-  while (chosen.size < count) {
-    const val = Math.floor(Math.random() * max) + 1;
-    chosen.add(val);
-  }
-  return Array.from(chosen).sort((a, b) => a - b);
-}
-
-/**
- * Generates an authentic simulated lottery draw for a given date and game
- */
-function createDrawForDate(game: GameType, dateStr: string): LotteryDraw {
-  const dateObj = new Date(dateStr + 'T00:00:00');
-  const dayOfWeek = DAY_NAMES[dateObj.getDay()];
-
-  if (game === 'euromillones') {
-    const numbers = generateRandomPicks(5, 50);
-    const stars = generateRandomPicks(2, 12);
-    return {
-      id: `em-${dateStr}`,
-      game,
-      date: dateStr,
-      dayOfWeek,
-      numbers,
-      stars,
-    };
-  }
-
-  // Primitiva or Bonoloto (6 numbers from 1 to 49)
-  const numbers = generateRandomPicks(6, 49);
-  const numSet = new Set(numbers);
-
-  // Complementario (distinct from the 6)
-  let complementario = Math.floor(Math.random() * 49) + 1;
-  while (numSet.has(complementario)) {
-    complementario = Math.floor(Math.random() * 49) + 1;
-  }
-
-  // Reintegro (0-9)
-  const reintegro = Math.floor(Math.random() * 10);
-
-  const prefix = game === 'primitiva' ? 'pr' : 'bn';
-  return {
-    id: `${prefix}-${dateStr}`,
-    game,
-    date: dateStr,
-    dayOfWeek,
-    numbers,
-    complementario,
-    reintegro,
-  };
 }
 
 export interface SyncResult {
@@ -145,53 +73,51 @@ export interface SyncResult {
   addedCount: number;
   addedByGame: Record<GameType, number>;
   latestDate: string;
+  removedFutureCount: number;
 }
 
 /**
- * Synchronizes the lottery database up to the specified target date.
+ * Synchronizes the lottery database strictly using authentic verified official draws.
+ * Never generates random fake lottery numbers.
+ * Also purges any future or premature draws that were mistakenly saved.
  */
-export function synchronizeDatabase(currentDraws: LotteryDraw[], targetDate: Date = new Date()): SyncResult {
-  const newDraws: LotteryDraw[] = [];
-  const games: GameType[] = ['primitiva', 'bonoloto', 'euromillones'];
+export function synchronizeDatabase(currentDraws: LotteryDraw[]): SyncResult {
+  // First sanitize to eliminate any premature or future draws
+  const sanitizedCurrent = sanitizeDraws(currentDraws);
+  const removedFutureCount = currentDraws.length - sanitizedCurrent.length;
+
+  const existingKeys = new Set(sanitizedCurrent.map((d) => `${d.game}-${d.date}`));
+  const newOfficialDraws: LotteryDraw[] = [];
+
   const addedByGame: Record<GameType, number> = {
     primitiva: 0,
     bonoloto: 0,
     euromillones: 0,
   };
 
-  games.forEach((game) => {
-    const pendingDates = getPendingDrawDates(game, currentDraws, targetDate);
-    pendingDates.forEach((dateStr) => {
-      const draw = createDrawForDate(game, dateStr);
-      newDraws.push(draw);
-      addedByGame[game]++;
-    });
-  });
+  // Check if any verified official seed draws are missing from the user's database
+  for (const officialDraw of INITIAL_DRAWS) {
+    const maxAllowed = getMaxCelebratedDateForGame(officialDraw.game);
+    if (officialDraw.date > maxAllowed) continue;
 
-  const merged = [...newDraws, ...currentDraws];
-
-  // Remove any potential duplicate IDs or same game+date
-  const seenKeys = new Set<string>();
-  const uniqueDraws: LotteryDraw[] = [];
-
-  merged.forEach((d) => {
-    const key = `${d.game}-${d.date}`;
-    if (!seenKeys.has(key)) {
-      seenKeys.add(key);
-      uniqueDraws.push(d);
+    const key = `${officialDraw.game}-${officialDraw.date}`;
+    if (!existingKeys.has(key)) {
+      newOfficialDraws.push(officialDraw);
+      existingKeys.add(key);
+      addedByGame[officialDraw.game]++;
     }
-  });
+  }
 
-  // Sort descending by date
-  uniqueDraws.sort((a, b) => b.date.localeCompare(a.date));
+  const merged = sanitizeDraws([...newOfficialDraws, ...sanitizedCurrent]);
 
-  const latestDate = targetDate.toISOString().split('T')[0];
+  const { dateStr } = getMadridTime();
 
   return {
-    updatedDraws: uniqueDraws,
-    addedCount: newDraws.length,
+    updatedDraws: merged,
+    addedCount: newOfficialDraws.length,
     addedByGame,
-    latestDate,
+    latestDate: dateStr,
+    removedFutureCount,
   };
 }
 
@@ -231,7 +157,8 @@ export function parseAndValidateDraws(jsonString: string): { valid: boolean; dra
       return { valid: false, error: 'No se encontraron sorteos con formato válido en el archivo.' };
     }
 
-    return { valid: true, draws: validDraws };
+    const sanitized = sanitizeDraws(validDraws);
+    return { valid: true, draws: sanitized };
   } catch {
     return { valid: false, error: 'Error de sintaxis JSON en el archivo seleccionado.' };
   }

@@ -86,11 +86,18 @@ export default function App() {
         saveStoredDraws(result.updatedDraws);
         setIsSyncing(false);
 
-        if (result.addedCount > 0) {
+        if (result.removedFutureCount > 0) {
           setSyncToast({
             show: true,
-            title: isAuto ? 'Sincronización automática completada' : '¡Base de datos actualizada!',
-            message: `Se han incorporado ${result.addedCount} sorteos recientes (Primitiva: +${result.addedByGame.primitiva}, Bonoloto: +${result.addedByGame.bonoloto}, Euromillones: +${result.addedByGame.euromillones}) hasta la fecha de hoy.`,
+            title: 'Sorteos futuros corregidos',
+            message: `Se han corregido ${result.removedFutureCount} sorteo(s) con fecha no celebrada o futura. La base de datos ahora contiene exclusivamente sorteos oficiales celebrados.`,
+            type: 'success',
+          });
+        } else if (result.addedCount > 0) {
+          setSyncToast({
+            show: true,
+            title: isAuto ? 'Sincronización oficial completada' : '¡Base de datos actualizada!',
+            message: `Se han incorporado ${result.addedCount} sorteos oficiales verificados (Primitiva: +${result.addedByGame.primitiva}, Bonoloto: +${result.addedByGame.bonoloto}, Euromillones: +${result.addedByGame.euromillones}).`,
             type: 'success',
           });
         } else {
@@ -98,7 +105,7 @@ export default function App() {
             setSyncToast({
               show: true,
               title: 'Base de datos al día',
-              message: 'Tu base de datos ya contiene todos los sorteos oficiales celebrados hasta el momento.',
+              message: 'Tu base de datos ya contiene todos los sorteos oficiales celebrados de Loterías y Apuestas del Estado. Los sorteos de hoy se celebran por la noche (21:30h/21:40h).',
               type: 'info',
             });
           }
@@ -288,9 +295,20 @@ export default function App() {
   };
 
   const handleResetDraws = () => {
-    if (window.confirm('¿Seguro que deseas restablecer los sorteos a los datos iniciales?')) {
+    if (
+      window.confirm(
+        '¿Deseas restaurar la base de datos a los sorteos oficiales verificados de Loterías y Apuestas del Estado? Se corregirán posibles datos simulados o fechas erróneas.'
+      )
+    ) {
       const reset = resetStoredDraws();
       setAllDraws(reset);
+      setSyncToast({
+        show: true,
+        title: 'Sorteos oficiales restaurados',
+        message:
+          'Base de datos restablecida correctamente con los sorteos oficiales verificados de Loterías y Apuestas del Estado.',
+        type: 'success',
+      });
     }
   };
 

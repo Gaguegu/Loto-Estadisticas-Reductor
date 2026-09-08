@@ -134,8 +134,8 @@ export const Header: React.FC<HeaderProps> = ({
               } ${isSyncing ? 'opacity-75 cursor-wait' : ''}`}
               title={
                 missingDrawsCount > 0
-                  ? `Hay ${missingDrawsCount} sorteos recientes disponibles. Haz clic para sincronizar la base de datos.`
-                  : 'Sincronizar base de datos con los últimos sorteos oficiales'
+                  ? `Hay ${missingDrawsCount} sorteos oficiales pendientes. Haz clic para sincronizar.`
+                  : 'Base de datos al día con los sorteos oficiales celebrados de Loterías y Apuestas del Estado.'
               }
             >
               <RefreshCw
@@ -148,10 +148,10 @@ export const Header: React.FC<HeaderProps> = ({
                 }`}
               />
               <span className="hidden sm:inline">
-                {isSyncing ? 'Actualizando BD...' : 'Actualizar Base de Datos'}
+                {isSyncing ? 'Verificando BD...' : missingDrawsCount > 0 ? 'Actualizar BD' : 'Sorteos Oficiales'}
               </span>
               <span className="sm:hidden">
-                {isSyncing ? 'Actualizando...' : 'Actualizar BD'}
+                {isSyncing ? '...' : 'Sorteos'}
               </span>
               {missingDrawsCount > 0 && !isSyncing && (
                 <span
