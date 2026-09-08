@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GameType, SavedCombination } from '../types';
 import {
   getSavedCombinations,
@@ -24,6 +24,7 @@ interface SavedCombinationsModalProps {
   onClose: () => void;
   onLoadCombination: (combo: SavedCombination, autoScrutinize?: boolean) => void;
   activeGame: GameType;
+  onCountChange?: (count: number) => void;
 }
 
 export const SavedCombinationsModal: React.FC<SavedCombinationsModalProps> = ({
@@ -31,10 +32,20 @@ export const SavedCombinationsModal: React.FC<SavedCombinationsModalProps> = ({
   onClose,
   onLoadCombination,
   activeGame,
+  onCountChange,
 }) => {
   const [combinations, setCombinations] = useState<SavedCombination[]>(() => getSavedCombinations());
   const [filterGame, setFilterGame] = useState<GameType | 'all'>('all');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Reload saved combinations from storage every time the modal is opened
+  useEffect(() => {
+    if (isOpen) {
+      const fresh = getSavedCombinations();
+      setCombinations(fresh);
+      onCountChange?.(fresh.length);
+    }
+  }, [isOpen, onCountChange]);
 
   if (!isOpen) return null;
 
@@ -49,6 +60,7 @@ export const SavedCombinationsModal: React.FC<SavedCombinationsModalProps> = ({
     if (window.confirm(`¿Estás seguro de eliminar la combinación guardada "${name}"?`)) {
       const updated = deleteSavedCombination(id);
       setCombinations(updated);
+      onCountChange?.(updated.length);
       showToast('Combinación eliminada con éxito');
     }
   };
@@ -79,6 +91,7 @@ export const SavedCombinationsModal: React.FC<SavedCombinationsModalProps> = ({
           );
           localStorage.setItem('loto_saved_combinations_v1', JSON.stringify(merged));
           setCombinations(merged);
+          onCountChange?.(merged.length);
           showToast(`Se han importado ${parsed.length} combinaciones correctamente`);
         }
       } catch (err) {

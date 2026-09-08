@@ -490,6 +490,7 @@ export default function App() {
                 allDraws={allDraws}
                 onPrint={handlePrint}
                 onAddDraw={handleAddDraw}
+                onSavedCombination={() => setSavedCombinationsCount(getSavedCombinations().length)}
               />
             )}
           </div>
@@ -617,6 +618,7 @@ export default function App() {
           }}
           onLoadCombination={handleLoadCombination}
           activeGame={activeGame}
+          onCountChange={setSavedCombinationsCount}
         />
       </div>
 

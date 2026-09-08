@@ -36,6 +36,7 @@ interface ColumnsViewerProps {
   allDraws?: LotteryDraw[];
   onPrint: () => void;
   onAddDraw?: (draw: LotteryDraw) => void;
+  onSavedCombination?: () => void;
 }
 
 type CheckerMode = 'none' | 'auto' | 'manual' | 'guarantee';
@@ -45,6 +46,7 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
   allDraws = [],
   onPrint,
   onAddDraw,
+  onSavedCombination,
 }) => {
   const [copied, setCopied] = useState(false);
 
@@ -1193,6 +1195,7 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
         onSaved={(comboName) => {
           setSaveSuccessToast(`¡Combinación "${comboName}" guardada en Mis Peñas!`);
           setTimeout(() => setSaveSuccessToast(null), 4000);
+          onSavedCombination?.();
         }}
         game={result.game}
         selectedNumbers={result.selectedNumbers}
