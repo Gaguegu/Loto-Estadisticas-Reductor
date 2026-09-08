@@ -1,7 +1,7 @@
 import React from 'react';
 import { GameType } from '../types';
 import { PWAInstallButton } from './PWAInstallButton';
-import { Database, Calendar, RefreshCw, FolderHeart } from 'lucide-react';
+import { Database, Calendar, RefreshCw, FolderHeart, BookOpen } from 'lucide-react';
 import ansamaLogo from '../assets/images/ansama_lottery_logo_1788692658153.jpg';
 
 interface HeaderProps {
@@ -14,6 +14,7 @@ interface HeaderProps {
   missingDrawsCount: number;
   onOpenSavedCombinations?: () => void;
   savedCombinationsCount?: number;
+  onOpenManual?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -26,6 +27,7 @@ export const Header: React.FC<HeaderProps> = ({
   missingDrawsCount,
   onOpenSavedCombinations,
   savedCombinationsCount = 0,
+  onOpenManual,
 }) => {
   const isEuro = activeGame === 'euromillones';
 
@@ -214,6 +216,23 @@ export const Header: React.FC<HeaderProps> = ({
                     {savedCombinationsCount}
                   </span>
                 )}
+              </button>
+            )}
+
+            {onOpenManual && (
+              <button
+                id="header-user-manual-btn"
+                onClick={onOpenManual}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition active:scale-95 shadow-xs cursor-pointer ${
+                  isEuro
+                    ? 'bg-slate-950/10 hover:bg-slate-950/20 border-slate-950/25 text-slate-950'
+                    : 'bg-white/15 hover:bg-white/25 border-white/30 text-white'
+                }`}
+                title="Manual de Usuario y Guía de Uso (Descargable en PDF)"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-amber-300" />
+                <span className="hidden sm:inline">Guía / Manual PDF</span>
+                <span className="sm:hidden">Guía</span>
               </button>
             )}
 

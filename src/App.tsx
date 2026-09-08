@@ -23,6 +23,8 @@ import { ColumnsViewer } from './components/ColumnsViewer';
 import { PrintSlip } from './components/PrintSlip';
 import { DrawsHistoryModal } from './components/DrawsHistoryModal';
 import { SavedCombinationsModal } from './components/SavedCombinationsModal';
+import { UserManualModal } from './components/UserManualModal';
+import { PrintManual } from './components/PrintManual';
 import { getSavedCombinations } from './utils/savedCombinations';
 import { SavedCombination } from './types';
 import { Sparkles, Info, HelpCircle, ArrowDown, CheckCircle2, RefreshCw, X, AlertTriangle, FolderHeart } from 'lucide-react';
@@ -33,6 +35,8 @@ export default function App() {
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isSavedCombinationsModalOpen, setIsSavedCombinationsModalOpen] = useState(false);
   const [savedCombinationsCount, setSavedCombinationsCount] = useState(() => getSavedCombinations().length);
+  const [isManualModalOpen, setIsManualModalOpen] = useState(false);
+  const [printMode, setPrintMode] = useState<'slip' | 'manual'>('slip');
   const [isSyncing, setIsSyncing] = useState(false);
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(() => getAutoSyncPreference());
   const [syncToast, setSyncToast] = useState<{
@@ -287,7 +291,20 @@ export default function App() {
   };
 
   const handlePrint = () => {
-    window.print();
+    setPrintMode('slip');
+    setTimeout(() => {
+      window.print();
+    }, 60);
+  };
+
+  const handlePrintManual = () => {
+    setPrintMode('manual');
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => {
+        setPrintMode('slip');
+      }, 500);
+    }, 60);
   };
 
   const handleAddDraw = (newDraw: LotteryDraw) => {
@@ -361,6 +378,7 @@ export default function App() {
             setIsSavedCombinationsModalOpen(true);
           }}
           savedCombinationsCount={savedCombinationsCount}
+          onOpenManual={() => setIsManualModalOpen(true)}
         />
 
         {/* Main Content Container */}
@@ -620,6 +638,13 @@ export default function App() {
           activeGame={activeGame}
           onCountChange={setSavedCombinationsCount}
         />
+
+        {/* User Manual & Technical Guide Modal */}
+        <UserManualModal
+          isOpen={isManualModalOpen}
+          onClose={() => setIsManualModalOpen(false)}
+          onPrintManual={handlePrintManual}
+        />
       </div>
 
       {/* Floating Toast Notification for Database Synchronization */}
@@ -668,8 +693,9 @@ export default function App() {
         </div>
       )}
 
-      {/* Printable Receipt (rendered ONLY when printing / PDF export) */}
-      {reductionResult && <PrintSlip result={reductionResult} />}
+      {/* Printable Components (rendered ONLY when printing / PDF export) */}
+      {printMode === 'slip' && reductionResult && <PrintSlip result={reductionResult} />}
+      {printMode === 'manual' && <PrintManual />}
     </div>
   );
 }
