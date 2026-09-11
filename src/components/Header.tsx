@@ -15,9 +15,10 @@ interface HeaderProps {
   onOpenSavedCombinations?: () => void;
   savedCombinationsCount?: number;
   onOpenManual?: () => void;
-  onOpenUpdateCenter?: () => void;
   hasAppUpdate?: boolean;
   isCheckingAppUpdate?: boolean;
+  onApplyUpdate?: () => void;
+  onCheckUpdates?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -31,9 +32,10 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSavedCombinations,
   savedCombinationsCount = 0,
   onOpenManual,
-  onOpenUpdateCenter,
   hasAppUpdate = false,
   isCheckingAppUpdate = false,
+  onApplyUpdate,
+  onCheckUpdates,
 }) => {
   const isEuro = activeGame === 'euromillones';
 
@@ -242,10 +244,11 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
-            {onOpenUpdateCenter && (
+            {(onApplyUpdate || onCheckUpdates) && (
               <button
                 id="header-app-update-btn"
-                onClick={onOpenUpdateCenter}
+                onClick={hasAppUpdate ? onApplyUpdate : onCheckUpdates}
+                disabled={isCheckingAppUpdate}
                 className={`relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition active:scale-95 shadow-xs cursor-pointer ${
                   hasAppUpdate
                     ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-black border-white ring-2 ring-emerald-300/80 animate-pulse'
@@ -255,8 +258,8 @@ export const Header: React.FC<HeaderProps> = ({
                 }`}
                 title={
                   hasAppUpdate
-                    ? '¡Nueva versión disponible! Clic para actualizar'
-                    : 'Centro de Actualizaciones y Sincronización con GitHub'
+                    ? 'Hay una actualización pendiente. Clic para actualizar ahora'
+                    : 'Comprobar si hay actualizaciones'
                 }
               >
                 <RefreshCw
@@ -268,11 +271,12 @@ export const Header: React.FC<HeaderProps> = ({
                       : 'text-amber-300'
                   }`}
                 />
-                <span className="hidden sm:inline">
-                  {hasAppUpdate ? '¡Actualizar!' : 'Actualizaciones'}
-                </span>
-                <span className="sm:hidden">
-                  {hasAppUpdate ? 'Actualizar' : 'v2.7'}
+                <span>
+                  {isCheckingAppUpdate
+                    ? 'Buscando...'
+                    : hasAppUpdate
+                    ? 'Actualizar'
+                    : 'Actualizar'}
                 </span>
                 {hasAppUpdate && (
                   <span className="flex h-2 w-2 relative">
