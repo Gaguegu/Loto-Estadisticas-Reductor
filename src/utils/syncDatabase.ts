@@ -171,6 +171,7 @@ export interface SyncResult {
   addedByGame: Record<GameType, number>;
   latestDate: string;
   removedFutureCount: number;
+  correctedVerifiedCount: number;
 }
 
 /**
@@ -182,7 +183,30 @@ export function synchronizeDatabase(currentDraws: LotteryDraw[]): SyncResult {
   const sanitizedCurrent = sanitizeDraws(currentDraws);
   const removedFutureCount = currentDraws.length - sanitizedCurrent.length;
 
-  const existingKeys = new Set(sanitizedCurrent.map((d) => `${d.game}-${d.date}`));
+  // Map of verified official seeds to guarantee correct official results
+  const verifiedMap = new Map<string, LotteryDraw>(
+    INITIAL_DRAWS.map((d) => [`${d.game}-${d.date}`, d])
+  );
+
+  let correctedVerifiedCount = 0;
+  // Apply verified official seed draws to any stored draw with discrepancies
+  const correctedCurrent = sanitizedCurrent.map((draw) => {
+    const key = `${draw.game}-${draw.date}`;
+    const verified = verifiedMap.get(key);
+    if (verified) {
+      const numbersDiff = JSON.stringify(draw.numbers) !== JSON.stringify(verified.numbers);
+      const compDiff = draw.complementario !== verified.complementario;
+      const reintDiff = draw.reintegro !== verified.reintegro;
+      const starsDiff = JSON.stringify(draw.stars || []) !== JSON.stringify(verified.stars || []);
+      if (numbersDiff || compDiff || reintDiff || starsDiff) {
+        correctedVerifiedCount++;
+        return verified;
+      }
+    }
+    return draw;
+  });
+
+  const existingKeys = new Set(correctedCurrent.map((d) => `${d.game}-${d.date}`));
   const newOfficialDraws: LotteryDraw[] = [];
 
   const addedByGame: Record<GameType, number> = {
@@ -223,7 +247,7 @@ export function synchronizeDatabase(currentDraws: LotteryDraw[]): SyncResult {
     }
   }
 
-  const merged = sanitizeDraws([...newOfficialDraws, ...sanitizedCurrent]);
+  const merged = sanitizeDraws([...newOfficialDraws, ...correctedCurrent]);
 
   const { dateStr } = getMadridTime();
 
@@ -233,6 +257,7 @@ export function synchronizeDatabase(currentDraws: LotteryDraw[]): SyncResult {
     addedByGame,
     latestDate: dateStr,
     removedFutureCount,
+    correctedVerifiedCount,
   };
 }
 

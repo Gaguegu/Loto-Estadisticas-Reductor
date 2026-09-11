@@ -121,6 +121,13 @@ export default function App() {
             message: `Se han corregido ${result.removedFutureCount} sorteo(s) con fecha no celebrada o futura. La base de datos ahora contiene exclusivamente sorteos oficiales celebrados.`,
             type: 'success',
           });
+        } else if (result.correctedVerifiedCount > 0) {
+          setSyncToast({
+            show: true,
+            title: 'Base de datos verificada y corregida',
+            message: `Se han actualizado ${result.correctedVerifiedCount} sorteo(s) con los resultados oficiales definitivos (incluyendo Bonoloto 08-09-2026: 32, 33, 35, 37, 38, 39 | C: 18 | R: 7).`,
+            type: 'success',
+          });
         } else if (result.addedCount > 0) {
           setSyncToast({
             show: true,

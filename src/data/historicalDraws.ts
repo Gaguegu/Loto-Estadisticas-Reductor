@@ -57,9 +57,9 @@ export const INITIAL_DRAWS: LotteryDraw[] = [
   // ==========================================
   // --- BONOLOTO (Diario: Lunes a Domingo) ---
   // ==========================================
-  { id: 'bn-2026-09-10', game: 'bonoloto', date: '2026-09-10', dayOfWeek: 'Jueves', numbers: [7, 14, 22, 31, 39, 45], complementario: 18, reintegro: 4 },
-  { id: 'bn-2026-09-09', game: 'bonoloto', date: '2026-09-09', dayOfWeek: 'Miércoles', numbers: [3, 11, 25, 32, 40, 48], complementario: 16, reintegro: 7 },
-  { id: 'bn-2026-09-08', game: 'bonoloto', date: '2026-09-08', dayOfWeek: 'Martes', numbers: [5, 19, 23, 28, 36, 43], complementario: 42, reintegro: 1 },
+  { id: 'bn-2026-09-10', game: 'bonoloto', date: '2026-09-10', dayOfWeek: 'Jueves', numbers: [3, 6, 14, 33, 36, 47], complementario: 32, reintegro: 8 },
+  { id: 'bn-2026-09-09', game: 'bonoloto', date: '2026-09-09', dayOfWeek: 'Miércoles', numbers: [12, 16, 23, 25, 29, 40], complementario: 47, reintegro: 9 },
+  { id: 'bn-2026-09-08', game: 'bonoloto', date: '2026-09-08', dayOfWeek: 'Martes', numbers: [32, 33, 35, 37, 38, 39], complementario: 18, reintegro: 7 },
   { id: 'bn-2026-09-07', game: 'bonoloto', date: '2026-09-07', dayOfWeek: 'Lunes', numbers: [18, 23, 24, 41, 44, 47], complementario: 3, reintegro: 2 },
   { id: 'bn-2026-09-06', game: 'bonoloto', date: '2026-09-06', dayOfWeek: 'Domingo', numbers: [4, 10, 21, 30, 31, 48], complementario: 37, reintegro: 3 },
   { id: 'bn-2026-09-05', game: 'bonoloto', date: '2026-09-05', dayOfWeek: 'Sábado', numbers: [17, 23, 32, 33, 36, 42], complementario: 1, reintegro: 0 },
@@ -135,7 +135,7 @@ export const INITIAL_DRAWS: LotteryDraw[] = [
   // ==============================================
   // --- LA PRIMITIVA (Lunes, Jueves, Sábado) ---
   // ==============================================
-  { id: 'pr-2026-09-10', game: 'primitiva', date: '2026-09-10', dayOfWeek: 'Jueves', numbers: [6, 15, 24, 33, 38, 46], complementario: 9, reintegro: 5 },
+  { id: 'pr-2026-09-10', game: 'primitiva', date: '2026-09-10', dayOfWeek: 'Jueves', numbers: [17, 26, 35, 44, 45, 48], complementario: 3, reintegro: 5 },
   { id: 'pr-2026-09-07', game: 'primitiva', date: '2026-09-07', dayOfWeek: 'Lunes', numbers: [18, 27, 28, 33, 46, 48], complementario: 23, reintegro: 4 },
   { id: 'pr-2026-09-05', game: 'primitiva', date: '2026-09-05', dayOfWeek: 'Sábado', numbers: [3, 12, 19, 31, 45, 47], complementario: 1, reintegro: 3 },
   { id: 'pr-2026-09-03', game: 'primitiva', date: '2026-09-03', dayOfWeek: 'Jueves', numbers: [20, 24, 29, 34, 39, 40], complementario: 13, reintegro: 5 },
@@ -184,7 +184,7 @@ export const INITIAL_DRAWS: LotteryDraw[] = [
   // ========================================================
   // --- EUROMILLONES (Martes y Viernes - 5N + 2 Estrellas) ---
   // ========================================================
-  { id: 'em-2026-09-08', game: 'euromillones', date: '2026-09-08', dayOfWeek: 'Martes', numbers: [4, 17, 26, 35, 47], stars: [3, 8] },
+  { id: 'em-2026-09-08', game: 'euromillones', date: '2026-09-08', dayOfWeek: 'Martes', numbers: [13, 17, 33, 35, 39], stars: [7, 12] },
   { id: 'em-2026-09-04', game: 'euromillones', date: '2026-09-04', dayOfWeek: 'Viernes', numbers: [11, 12, 19, 27, 46], stars: [4, 12] },
   { id: 'em-2026-09-01', game: 'euromillones', date: '2026-09-01', dayOfWeek: 'Martes', numbers: [2, 10, 23, 37, 47], stars: [3, 5] },
   { id: 'em-2026-08-28', game: 'euromillones', date: '2026-08-28', dayOfWeek: 'Viernes', numbers: [7, 14, 28, 42, 45], stars: [6, 9] },
@@ -268,20 +268,44 @@ export function getStoredDraws(): LotteryDraw[] {
       const parsed: LotteryDraw[] = JSON.parse(data);
       if (Array.isArray(parsed) && parsed.length > 0) {
         const cleaned = sanitizeDraws(parsed);
-        const existingKeys = new Set(cleaned.map((d) => `${d.game}-${d.date}`));
+        
+        // Map of verified official seed draws to ensure verified results always take precedence
+        const verifiedMap = new Map<string, LotteryDraw>(
+          INITIAL_DRAWS.map((d) => [`${d.game}-${d.date}`, d])
+        );
+
+        let hasUpdates = false;
+        // Update any draw where official verified seed numbers/C/R differ from stale local storage
+        const updatedList: LotteryDraw[] = cleaned.map((draw) => {
+          const key = `${draw.game}-${draw.date}`;
+          const verified = verifiedMap.get(key);
+          if (verified) {
+            const numbersDiff = JSON.stringify(draw.numbers) !== JSON.stringify(verified.numbers);
+            const compDiff = draw.complementario !== verified.complementario;
+            const reintDiff = draw.reintegro !== verified.reintegro;
+            const starsDiff = JSON.stringify(draw.stars || []) !== JSON.stringify(verified.stars || []);
+            if (numbersDiff || compDiff || reintDiff || starsDiff) {
+              hasUpdates = true;
+              return verified;
+            }
+          }
+          return draw;
+        });
+
+        const existingKeys = new Set(updatedList.map((d) => `${d.game}-${d.date}`));
         
         // Check if any verified official seeds from INITIAL_DRAWS are missing
         const missingSeeds = INITIAL_DRAWS.filter(
           (d) => !existingKeys.has(`${d.game}-${d.date}`) && d.date <= getMaxCelebratedDateForGame(d.game)
         );
 
-        if (missingSeeds.length > 0 || cleaned.length !== parsed.length) {
-          const merged = sanitizeDraws([...cleaned, ...missingSeeds]);
+        if (hasUpdates || missingSeeds.length > 0 || cleaned.length !== parsed.length) {
+          const merged = sanitizeDraws([...missingSeeds, ...updatedList]);
           saveStoredDraws(merged);
           return merged;
         }
 
-        return cleaned;
+        return updatedList;
       }
     }
   } catch (e) {
