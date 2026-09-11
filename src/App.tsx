@@ -25,6 +25,9 @@ import { DrawsHistoryModal } from './components/DrawsHistoryModal';
 import { SavedCombinationsModal } from './components/SavedCombinationsModal';
 import { UserManualModal } from './components/UserManualModal';
 import { PrintManual } from './components/PrintManual';
+import { UpdateNotificationBanner } from './components/UpdateNotificationBanner';
+import { UpdateCenterModal } from './components/UpdateCenterModal';
+import { useAppUpdate } from './hooks/useAppUpdate';
 import { getSavedCombinations } from './utils/savedCombinations';
 import { SavedCombination } from './types';
 import { Sparkles, Info, HelpCircle, ArrowDown, CheckCircle2, RefreshCw, X, AlertTriangle, FolderHeart } from 'lucide-react';
@@ -36,7 +39,23 @@ export default function App() {
   const [isSavedCombinationsModalOpen, setIsSavedCombinationsModalOpen] = useState(false);
   const [savedCombinationsCount, setSavedCombinationsCount] = useState(() => getSavedCombinations().length);
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [printMode, setPrintMode] = useState<'slip' | 'manual'>('slip');
+
+  // Application auto-update and GitHub synchronization hook
+  const {
+    hasUpdate: hasAppUpdate,
+    updateMessage: appUpdateMessage,
+    isChecking: isCheckingAppUpdate,
+    lastChecked: lastUpdateChecked,
+    latestCommit,
+    githubRepo,
+    setGithubRepo,
+    checkForUpdates,
+    applyUpdate,
+    dismissNotification: dismissUpdateNotification,
+  } = useAppUpdate();
+
   const [isSyncing, setIsSyncing] = useState(false);
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(() => getAutoSyncPreference());
   const [syncToast, setSyncToast] = useState<{
@@ -379,6 +398,9 @@ export default function App() {
           }}
           savedCombinationsCount={savedCombinationsCount}
           onOpenManual={() => setIsManualModalOpen(true)}
+          onOpenUpdateCenter={() => setIsUpdateModalOpen(true)}
+          hasAppUpdate={hasAppUpdate}
+          isCheckingAppUpdate={isCheckingAppUpdate}
         />
 
         {/* Main Content Container */}
@@ -645,7 +667,33 @@ export default function App() {
           onClose={() => setIsManualModalOpen(false)}
           onPrintManual={handlePrintManual}
         />
+
+        {/* Update Center & GitHub Sync Modal */}
+        <UpdateCenterModal
+          isOpen={isUpdateModalOpen}
+          onClose={() => setIsUpdateModalOpen(false)}
+          hasUpdate={hasAppUpdate}
+          updateMessage={appUpdateMessage}
+          isChecking={isCheckingAppUpdate}
+          lastChecked={lastUpdateChecked}
+          latestCommit={latestCommit}
+          githubRepo={githubRepo}
+          onSetGithubRepo={setGithubRepo}
+          onCheckForUpdates={() => checkForUpdates(true)}
+          onApplyUpdate={applyUpdate}
+        />
       </div>
+
+      {/* Floating Top Banner when a new GitHub commit / PWA update is ready */}
+      <UpdateNotificationBanner
+        hasUpdate={hasAppUpdate}
+        updateMessage={appUpdateMessage}
+        isUpdating={isCheckingAppUpdate}
+        latestCommit={latestCommit}
+        onApplyUpdate={applyUpdate}
+        onDismiss={dismissUpdateNotification}
+        onOpenDetails={() => setIsUpdateModalOpen(true)}
+      />
 
       {/* Floating Toast Notification for Database Synchronization */}
       {syncToast && (

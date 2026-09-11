@@ -1,0 +1,7 @@
+{
+  "version": "2.7.0",
+  "buildTime": 1773312000000,
+  "buildDate": "2026-09-11T10:35:00.000Z",
+  "appName": "LotoEstadísticas & Reductor",
+  "notes": "Soporte de actualización automática desde GitHub, Service Worker y caché limpio."
+}

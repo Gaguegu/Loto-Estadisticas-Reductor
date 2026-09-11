@@ -15,6 +15,9 @@ interface HeaderProps {
   onOpenSavedCombinations?: () => void;
   savedCombinationsCount?: number;
   onOpenManual?: () => void;
+  onOpenUpdateCenter?: () => void;
+  hasAppUpdate?: boolean;
+  isCheckingAppUpdate?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -28,6 +31,9 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSavedCombinations,
   savedCombinationsCount = 0,
   onOpenManual,
+  onOpenUpdateCenter,
+  hasAppUpdate = false,
+  isCheckingAppUpdate = false,
 }) => {
   const isEuro = activeGame === 'euromillones';
 
@@ -233,6 +239,47 @@ export const Header: React.FC<HeaderProps> = ({
                 <BookOpen className="w-3.5 h-3.5 text-amber-300" />
                 <span className="hidden sm:inline">Guía / Manual PDF</span>
                 <span className="sm:hidden">Guía</span>
+              </button>
+            )}
+
+            {onOpenUpdateCenter && (
+              <button
+                id="header-app-update-btn"
+                onClick={onOpenUpdateCenter}
+                className={`relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition active:scale-95 shadow-xs cursor-pointer ${
+                  hasAppUpdate
+                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-black border-white ring-2 ring-emerald-300/80 animate-pulse'
+                    : isEuro
+                    ? 'bg-slate-950/10 hover:bg-slate-950/20 border-slate-950/25 text-slate-950'
+                    : 'bg-white/15 hover:bg-white/25 border-white/30 text-white'
+                }`}
+                title={
+                  hasAppUpdate
+                    ? '¡Nueva versión disponible! Clic para actualizar'
+                    : 'Centro de Actualizaciones y Sincronización con GitHub'
+                }
+              >
+                <RefreshCw
+                  className={`w-3.5 h-3.5 ${
+                    isCheckingAppUpdate
+                      ? 'animate-spin text-amber-300'
+                      : hasAppUpdate
+                      ? 'text-white'
+                      : 'text-amber-300'
+                  }`}
+                />
+                <span className="hidden sm:inline">
+                  {hasAppUpdate ? '¡Actualizar!' : 'Actualizaciones'}
+                </span>
+                <span className="sm:hidden">
+                  {hasAppUpdate ? 'Actualizar' : 'v2.7'}
+                </span>
+                {hasAppUpdate && (
+                  <span className="flex h-2 w-2 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-300"></span>
+                  </span>
+                )}
               </button>
             )}
 
