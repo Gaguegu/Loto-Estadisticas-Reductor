@@ -1307,14 +1307,14 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
                 <span>Elegir sorteo del histórico oficial para comprobar:</span>
               </label>
 
-              <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
                 {onSyncDatabase && (
                   <button
                     type="button"
                     id="btn-update-db-escrutador"
                     onClick={() => onSyncDatabase()}
                     disabled={isSyncingDatabase}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition active:scale-95 cursor-pointer disabled:opacity-50"
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition active:scale-95 cursor-pointer disabled:opacity-50 w-full sm:w-auto"
                     title="Actualizar base de datos para descargar sorteos recientes (incluyendo el de ayer)"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isSyncingDatabase ? 'animate-spin' : ''}`} />
@@ -1326,7 +1326,7 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
                   <button
                     type="button"
                     onClick={() => setSelectedDrawId(gameDraws[0].id)}
-                    className="text-xs text-indigo-700 font-bold hover:underline"
+                    className="text-xs text-indigo-700 font-bold hover:underline text-center sm:text-left py-1"
                   >
                     &larr; Comprobar con el último sorteo ({gameDraws[0].dayOfWeek},{' '}
                     {gameDraws[0].date})
