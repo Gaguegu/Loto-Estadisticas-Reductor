@@ -321,6 +321,19 @@ export default function App() {
     }, 60);
   };
 
+  const handleUpdateColumnReintegros = (reintegrosMap: Record<number, number | undefined>) => {
+    setReductionResult((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        columns: prev.columns.map((col) => ({
+          ...col,
+          reintegro: reintegrosMap[col.id] !== undefined ? reintegrosMap[col.id] : col.reintegro,
+        })),
+      };
+    });
+  };
+
   const handlePrintManual = () => {
     setPrintMode('manual');
     setTimeout(() => {
@@ -539,6 +552,7 @@ export default function App() {
                 onSavedCombination={() => setSavedCombinationsCount(getSavedCombinations().length)}
                 onSyncDatabase={() => handleSyncDatabase(false)}
                 isSyncingDatabase={isSyncing}
+                onUpdateColumnReintegros={handleUpdateColumnReintegros}
               />
             )}
           </div>

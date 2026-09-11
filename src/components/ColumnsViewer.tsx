@@ -30,6 +30,7 @@ import {
   FolderPlus,
   RefreshCw,
   Tag,
+  Ticket,
 } from 'lucide-react';
 import { SaveCombinationDialog } from './SaveCombinationDialog';
 
@@ -41,6 +42,7 @@ interface ColumnsViewerProps {
   onSavedCombination?: () => void;
   onSyncDatabase?: () => Promise<void> | void;
   isSyncingDatabase?: boolean;
+  onUpdateColumnReintegros?: (reintegros: Record<number, number | undefined>) => void;
 }
 
 type CheckerMode = 'none' | 'auto' | 'manual' | 'guarantee';
@@ -53,6 +55,7 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
   onSavedCombination,
   onSyncDatabase,
   isSyncingDatabase = false,
+  onUpdateColumnReintegros,
 }) => {
   const [copied, setCopied] = useState(false);
 
@@ -100,6 +103,7 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
   });
 
   const [bulkReintegro, setBulkReintegro] = useState<number | undefined>(undefined);
+  const [reintegroMode, setReintegroMode] = useState<'by_boleto' | 'all'>('by_boleto');
 
   // Sync if columns change
   useEffect(() => {
@@ -112,6 +116,13 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
     });
   }, [result.columns]);
 
+  // Propagate updated reintegros to parent component
+  useEffect(() => {
+    if (onUpdateColumnReintegros) {
+      onUpdateColumnReintegros(columnReintegros);
+    }
+  }, [columnReintegros, onUpdateColumnReintegros]);
+
   const handleSetAllReintegros = (reintegro: number) => {
     setBulkReintegro(reintegro);
     setColumnReintegros(() => {
@@ -121,6 +132,39 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
       });
       return updated;
     });
+  };
+
+  // Set reintegro for an official 8-column ticket block (1-8, 9-16, 17-24...)
+  const handleSetBoletoReintegro = (boletoIndex: number, reintegro: number) => {
+    const startIdx = boletoIndex * 8;
+    const endIdx = Math.min(startIdx + 8, result.columns.length);
+    setColumnReintegros((prev) => {
+      const updated = { ...prev };
+      for (let i = startIdx; i < endIdx; i++) {
+        const col = result.columns[i];
+        if (col) {
+          updated[col.id] = reintegro;
+        }
+      }
+      return updated;
+    });
+    setBulkReintegro(undefined);
+  };
+
+  const handleClearBoletoReintegro = (boletoIndex: number) => {
+    const startIdx = boletoIndex * 8;
+    const endIdx = Math.min(startIdx + 8, result.columns.length);
+    setColumnReintegros((prev) => {
+      const updated = { ...prev };
+      for (let i = startIdx; i < endIdx; i++) {
+        const col = result.columns[i];
+        if (col) {
+          updated[col.id] = undefined;
+        }
+      }
+      return updated;
+    });
+    setBulkReintegro(undefined);
   };
 
   const handleSetColumnReintegro = (colId: number, reintegro: number | undefined) => {
@@ -234,6 +278,64 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
     manualStars,
     guaranteeTestDraw,
   ]);
+
+  // Boletos list (blocks of 8 columns: 1-8, 9-16, 17-24...)
+  const boletosList = useMemo(() => {
+    const list: {
+      boletoIndex: number;
+      boletoNumber: number;
+      startCol: number;
+      endCol: number;
+      columnsCount: number;
+      columns: typeof result.columns;
+      reintegro: number | 'mixed' | undefined;
+      isWinning: boolean;
+      winningColumnsCount: number;
+    }[] = [];
+    const total = Math.ceil(result.columns.length / 8);
+    for (let b = 0; b < total; b++) {
+      const startIdx = b * 8;
+      const endIdx = Math.min(startIdx + 8, result.columns.length);
+      const cols = result.columns.slice(startIdx, endIdx);
+      const startCol = startIdx + 1;
+      const endCol = endIdx;
+
+      const firstR = cols.length > 0 ? columnReintegros[cols[0].id] : undefined;
+      let isUniform = true;
+      for (let i = 1; i < cols.length; i++) {
+        if (columnReintegros[cols[i].id] !== firstR) {
+          isUniform = false;
+          break;
+        }
+      }
+
+      const reintegroVal = isUniform ? firstR : 'mixed';
+      const isWinning =
+        activeDrawInfo?.reintegro !== undefined &&
+        typeof reintegroVal === 'number' &&
+        reintegroVal === activeDrawInfo.reintegro;
+
+      const winningColumnsCount = cols.filter(
+        (c) =>
+          activeDrawInfo?.reintegro !== undefined &&
+          columnReintegros[c.id] !== undefined &&
+          columnReintegros[c.id] === activeDrawInfo.reintegro
+      ).length;
+
+      list.push({
+        boletoIndex: b,
+        boletoNumber: b + 1,
+        startCol,
+        endCol,
+        columnsCount: cols.length,
+        columns: cols,
+        reintegro: reintegroVal,
+        isWinning,
+        winningColumnsCount,
+      });
+    }
+    return list;
+  }, [result.columns, columnReintegros, activeDrawInfo]);
 
   // Scrutiny calculation per column
   const evaluatedColumns = useMemo(() => {
@@ -1812,23 +1914,24 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
             {/* PANEL DE ASIGNACIÓN DE REINTEGROS (ADMINISTRACIÓN / BOLETO)       */}
             {/* ----------------------------------------------------------------- */}
             {result.game !== 'euromillones' && (
-              <div className="bg-blue-50/70 border border-blue-200/90 rounded-2xl p-3 sm:p-4 space-y-2.5">
+              <div className="bg-blue-50/70 border border-blue-200/90 rounded-2xl p-3 sm:p-4 space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-black text-blue-950 flex items-center gap-1.5">
+                      <span className="text-sm font-black text-blue-950 flex items-center gap-1.5">
                         <Tag className="w-4 h-4 text-blue-600" />
-                        Reintegro asignado por la Administración (0 - 9)
+                        Reintegro de tus Apuestas (0 - 9)
                       </span>
                       {activeDrawInfo?.reintegro !== undefined && (
-                        <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-blue-700 text-white shadow-2xs">
-                          R. Ganador Sorteo: {activeDrawInfo.reintegro}
+                        <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-blue-700 text-white shadow-2xs flex items-center gap-1">
+                          <span>R. Ganador Sorteo:</span>
+                          <span className="font-mono text-amber-300 underline font-black">{activeDrawInfo.reintegro}</span>
                         </span>
                       )}
                     </div>
-                    <p className="text-[11px] text-blue-800/85 mt-0.5">
-                      Al validar tus apuestas, el terminal de Loterías imprime el reintegro en el resguardo.
-                      Asígnalo para comprobar los reembolsos de tus columnas:
+                    <p className="text-xs text-blue-800/85 mt-0.5">
+                      Los boletos oficiales de Loterías agrupan <strong>hasta 8 apuestas por resguardo</strong> (Boleto 1: Col. 01-08, Boleto 2: Col. 09-16...).
+                      Asigna el reintegro por cada resguardo en 1 clic o a todas a la vez:
                     </p>
                   </div>
 
@@ -1836,10 +1939,11 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
                     <button
                       type="button"
                       onClick={handleSimulateBoletoReintegros}
-                      className="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-white border border-blue-300 text-blue-800 hover:bg-blue-100/80 transition shadow-2xs cursor-pointer flex items-center gap-1"
+                      className="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-white border border-blue-300 text-blue-800 hover:bg-blue-100/80 transition shadow-2xs cursor-pointer flex items-center gap-1.5"
                       title="Asigna reintegros aleatorios por cada boleto oficial de 8 apuestas como hace el terminal de Loterías"
                     >
-                      <span>🎲 Aleatorio por boleto (8 ap.)</span>
+                      <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                      <span>🎲 Aleatorio por boletos (8 ap.)</span>
                     </button>
                     <button
                       type="button"
@@ -1847,42 +1951,189 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
                       className="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-white/90 border border-slate-200 text-slate-600 hover:bg-slate-100 transition cursor-pointer"
                       title="Limpiar todos los reintegros asignados"
                     >
-                      Limpiar
+                      Limpiar todos
                     </button>
                   </div>
                 </div>
 
-                {/* Quick set for all columns */}
-                <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-blue-200/60">
-                  <span className="text-xs font-bold text-blue-900 mr-1">
-                    Mismo reintegro en todas las columnas:
-                  </span>
-                  {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => {
-                    const isSelected = bulkReintegro === num;
-                    const isWinning = activeDrawInfo?.reintegro === num;
-                    return (
-                      <button
-                        key={num}
-                        type="button"
-                        onClick={() => handleSetAllReintegros(num)}
-                        className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full text-xs font-black transition cursor-pointer shadow-2xs ${
-                          isSelected
-                            ? 'bg-blue-700 text-white ring-2 ring-blue-400 scale-105'
-                            : isWinning
-                            ? 'bg-blue-100 text-blue-950 border-2 border-blue-500 font-black hover:bg-blue-200'
-                            : 'bg-white text-blue-900 border border-blue-200 hover:bg-blue-100/70'
-                        }`}
-                        title={`Asignar Reintegro ${num} a todas las apuestas`}
-                      >
-                        {num}
-                      </button>
-                    );
-                  })}
+                {/* Mode Selector Tabs */}
+                <div className="flex items-center gap-2 border-b border-blue-200/80 pb-2.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setReintegroMode('by_boleto')}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                      reintegroMode === 'by_boleto'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-white text-blue-900 border border-blue-200 hover:bg-blue-100/60'
+                    }`}
+                  >
+                    <Ticket className="w-3.5 h-3.5" />
+                    <span>Por Boletos / Resguardos (8 apuestas por boleto)</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                        reintegroMode === 'by_boleto' ? 'bg-blue-800 text-white' : 'bg-blue-100 text-blue-800'
+                      }`}
+                    >
+                      {boletosList.length} {boletosList.length === 1 ? 'boleto' : 'boletos'}
+                    </span>
+                  </button>
 
-                  <span className="text-[11px] text-blue-700/80 sm:ml-auto font-medium">
-                    (o cámbialo en cada columna abajo)
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setReintegroMode('all')}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                      reintegroMode === 'all'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-white text-blue-900 border border-blue-200 hover:bg-blue-100/60'
+                    }`}
+                  >
+                    <span>Mismo Reintegro a Todas (Col. 01 a {result.columnsCount})</span>
+                  </button>
                 </div>
+
+                {/* Mode A: By Boleto (Col 1-8, 9-16, 17-24, etc.) */}
+                {reintegroMode === 'by_boleto' && (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5">
+                      {boletosList.map((boleto) => {
+                        const isWinning = boleto.isWinning;
+                        const isMixed = boleto.reintegro === 'mixed';
+                        const isAssigned = typeof boleto.reintegro === 'number';
+
+                        return (
+                          <div
+                            key={boleto.boletoIndex}
+                            className={`p-2.5 rounded-xl border transition-all ${
+                              isWinning
+                                ? 'bg-emerald-50/90 border-emerald-400 ring-2 ring-emerald-300 shadow-xs'
+                                : isAssigned
+                                ? 'bg-white border-blue-300 shadow-2xs'
+                                : 'bg-white/80 border-blue-200/80'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-100 flex-wrap gap-1">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-black text-slate-800 flex items-center gap-1">
+                                  <Ticket className="w-3.5 h-3.5 text-blue-600" />
+                                  Boleto {boleto.boletoNumber}
+                                </span>
+                                <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 font-mono">
+                                  Cols {boleto.startCol.toString().padStart(2, '0')} - {boleto.endCol.toString().padStart(2, '0')}
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-medium">
+                                  ({boleto.columnsCount} ap.)
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-1">
+                                {isWinning ? (
+                                  <span className="text-[11px] font-black text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md flex items-center gap-1 border border-emerald-300">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                    R: {boleto.reintegro} (¡Acertado! +{(boleto.columnsCount * result.pricePerBet).toFixed(2)} €)
+                                  </span>
+                                ) : isAssigned ? (
+                                  <span className="text-[11px] font-black text-blue-900 bg-blue-100 px-2 py-0.5 rounded-md border border-blue-200">
+                                    R: {boleto.reintegro}
+                                  </span>
+                                ) : isMixed ? (
+                                  <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-200">
+                                    R: Mixto
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-slate-400 italic">
+                                    Sin asignar
+                                  </span>
+                                )}
+
+                                {(isAssigned || isMixed) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleClearBoletoReintegro(boleto.boletoIndex)}
+                                    className="text-slate-400 hover:text-rose-600 p-0.5 rounded text-xs ml-0.5 cursor-pointer"
+                                    title={`Limpiar reintegro de Boleto ${boleto.boletoNumber} (Cols ${boleto.startCol} a ${boleto.endCol})`}
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* 0 to 9 quick-assignment buttons for this ticket */}
+                            <div className="flex items-center justify-between gap-1">
+                              {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => {
+                                const isSelected = boleto.reintegro === num;
+                                const isWinningDrawR = activeDrawInfo?.reintegro === num;
+
+                                return (
+                                  <button
+                                    key={num}
+                                    type="button"
+                                    onClick={() => handleSetBoletoReintegro(boleto.boletoIndex, num)}
+                                    className={`flex-1 py-1 rounded-lg text-xs font-black transition cursor-pointer ${
+                                      isSelected && isWinningDrawR
+                                        ? 'bg-emerald-600 text-white ring-2 ring-emerald-400 scale-105 shadow-xs'
+                                        : isSelected
+                                        ? 'bg-blue-600 text-white ring-2 ring-blue-400 scale-105 shadow-xs'
+                                        : isWinningDrawR
+                                        ? 'bg-emerald-50 text-emerald-950 border border-emerald-400 font-black hover:bg-emerald-100'
+                                        : 'bg-slate-100/90 text-slate-700 hover:bg-blue-100 hover:text-blue-900 border border-transparent'
+                                    }`}
+                                    title={`Asignar Reintegro ${num} a las columnas ${boleto.startCol} a ${boleto.endCol} (Boleto ${boleto.boletoNumber})`}
+                                  >
+                                    {num}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <p className="text-[11px] text-blue-900/75 pt-1">
+                      💡 Pulsa el número de reintegro que aparece impreso en cada uno de tus resguardos de 8 apuestas.
+                    </p>
+                  </div>
+                )}
+
+                {/* Mode B: All columns at once */}
+                {reintegroMode === 'all' && (
+                  <div className="bg-white rounded-xl p-3 border border-blue-200 space-y-2">
+                    <div className="flex items-center justify-between flex-wrap gap-1">
+                      <span className="text-xs font-bold text-blue-950">
+                        Selecciona un número para aplicarlo a las {result.columnsCount} columnas simultáneamente:
+                      </span>
+                      {bulkReintegro !== undefined && (
+                        <span className="text-xs font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                          Reintegro Global: {bulkReintegro}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => {
+                        const isSelected = bulkReintegro === num;
+                        const isWinning = activeDrawInfo?.reintegro === num;
+                        return (
+                          <button
+                            key={num}
+                            type="button"
+                            onClick={() => handleSetAllReintegros(num)}
+                            className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl text-xs sm:text-sm font-black transition cursor-pointer shadow-2xs ${
+                              isSelected
+                                ? 'bg-blue-700 text-white ring-2 ring-blue-400 scale-105'
+                                : isWinning
+                                ? 'bg-blue-100 text-blue-950 border-2 border-blue-500 font-black hover:bg-blue-200'
+                                : 'bg-slate-100 text-blue-900 border border-slate-200 hover:bg-blue-100/70'
+                            }`}
+                            title={`Asignar Reintegro ${num} a todas las apuestas (Col 01 a ${result.columnsCount})`}
+                          >
+                            {num}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -2376,10 +2627,18 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
                 }`}
               >
                 <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-slate-200/80 flex-wrap gap-1.5">
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-xs font-bold font-mono text-slate-600 bg-white px-2 py-0.5 rounded-md border border-slate-200">
                       Columna {col.id.toString().padStart(2, '0')}
                     </span>
+                    {result.game !== 'euromillones' && (
+                      <span
+                        className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200"
+                        title={`Boleto oficial ${Math.floor((col.id - 1) / 8) + 1} (Apuestas ${Math.floor((col.id - 1) / 8) * 8 + 1} a ${Math.min((Math.floor((col.id - 1) / 8) + 1) * 8, result.columnsCount)})`}
+                      >
+                        Boleto {Math.floor((col.id - 1) / 8) + 1}
+                      </span>
+                    )}
 
                     {/* Reintegro selector/indicator for Primitiva & Bonoloto */}
                     {result.game !== 'euromillones' && (
