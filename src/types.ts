@@ -58,6 +58,7 @@ export interface GeneratedColumn {
   id: number;
   numbers: number[];
   stars?: number[];
+  reintegro?: number;
 }
 
 export interface ReductionResult {

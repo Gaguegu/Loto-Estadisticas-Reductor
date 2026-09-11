@@ -94,6 +94,11 @@ export const PrintSlip: React.FC<PrintSlipProps> = ({ result }) => {
                   ★ {col.stars.join(' ')}
                 </span>
               )}
+              {col.reintegro !== undefined && (
+                <span className="text-blue-700 font-bold ml-1 text-[11px]">
+                  R:{col.reintegro}
+                </span>
+              )}
             </div>
           ))}
         </div>

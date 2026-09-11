@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ReductionResult, LotteryDraw } from '../types';
 import { REDUCTION_PLANS } from '../utils/reductions';
 import {
@@ -29,6 +29,7 @@ import {
   Sliders,
   FolderPlus,
   RefreshCw,
+  Tag,
 } from 'lucide-react';
 import { SaveCombinationDialog } from './SaveCombinationDialog';
 
@@ -86,8 +87,66 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
   const [guaranteeTestDraw, setGuaranteeTestDraw] = useState<number[]>([]);
 
   // Columns filter and sorting in scrutiny
-  const [hitsFilter, setHitsFilter] = useState<'all' | 'prizes_only' | number>('all');
+  const [hitsFilter, setHitsFilter] = useState<'all' | 'prizes_only' | 'reintegro' | number>('all');
   const [sortByHits, setSortByHits] = useState<boolean>(true);
+
+  // Reintegro assigned to each column (for Primitiva and Bonoloto)
+  const [columnReintegros, setColumnReintegros] = useState<Record<number, number | undefined>>(() => {
+    const initial: Record<number, number | undefined> = {};
+    result.columns.forEach((col) => {
+      initial[col.id] = col.reintegro;
+    });
+    return initial;
+  });
+
+  const [bulkReintegro, setBulkReintegro] = useState<number | undefined>(undefined);
+
+  // Sync if columns change
+  useEffect(() => {
+    setColumnReintegros((prev) => {
+      const next: Record<number, number | undefined> = {};
+      result.columns.forEach((col) => {
+        next[col.id] = prev[col.id] ?? col.reintegro;
+      });
+      return next;
+    });
+  }, [result.columns]);
+
+  const handleSetAllReintegros = (reintegro: number) => {
+    setBulkReintegro(reintegro);
+    setColumnReintegros(() => {
+      const updated: Record<number, number | undefined> = {};
+      result.columns.forEach((col) => {
+        updated[col.id] = reintegro;
+      });
+      return updated;
+    });
+  };
+
+  const handleSetColumnReintegro = (colId: number, reintegro: number | undefined) => {
+    setColumnReintegros((prev) => ({
+      ...prev,
+      [colId]: reintegro,
+    }));
+  };
+
+  const handleSimulateBoletoReintegros = () => {
+    const updated: Record<number, number | undefined> = {};
+    let currentBoletoR = Math.floor(Math.random() * 10);
+    result.columns.forEach((col, idx) => {
+      if (idx > 0 && idx % 8 === 0) {
+        currentBoletoR = Math.floor(Math.random() * 10);
+      }
+      updated[col.id] = currentBoletoR;
+    });
+    setColumnReintegros(updated);
+    setBulkReintegro(undefined);
+  };
+
+  const handleClearReintegros = () => {
+    setColumnReintegros({});
+    setBulkReintegro(undefined);
+  };
 
   // Favorites & Peña Save State
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
@@ -181,6 +240,7 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
     if (!activeDrawInfo || activeDrawInfo.numbers.length === 0) {
       return result.columns.map((col) => ({
         ...col,
+        reintegro: columnReintegros[col.id],
         numberHits: 0,
         hitNumbers: [] as number[],
         hasComplementario: false,
@@ -203,9 +263,12 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
         activeDrawInfo.complementario !== undefined &&
         col.numbers.includes(activeDrawInfo.complementario);
 
+      const colReintegro = columnReintegros[col.id];
       const hasReintegro =
+        result.game !== 'euromillones' &&
+        colReintegro !== undefined &&
         activeDrawInfo.reintegro !== undefined &&
-        result.selectedNumbers.includes(activeDrawInfo.reintegro);
+        colReintegro === activeDrawInfo.reintegro;
 
       const hitStars = col.stars ? col.stars.filter((s) => winningStarsSet.has(s)) : [];
       const starHits = hitStars.length;
@@ -260,7 +323,7 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
         // Primitiva & Bonoloto
         if (numberHits === 6) {
           isPrize = true;
-          prizeCategory = '1ª Cat (6 Aciertos)';
+          prizeCategory = hasReintegro ? 'Esp. Cat (6 + R)' : '1ª Cat (6 Aciertos)';
         } else if (numberHits === 5 && hasComplementario) {
           isPrize = true;
           prizeCategory = '2ª Cat (5 + C)';
@@ -273,6 +336,9 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
         } else if (numberHits === 3) {
           isPrize = true;
           prizeCategory = '5ª Cat (3 Aciertos)';
+        } else if (hasReintegro) {
+          isPrize = true;
+          prizeCategory = 'Reintegro (Reembolso)';
         } else {
           prizeCategory = `${numberHits} aciertos`;
         }
@@ -280,6 +346,7 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
 
       return {
         ...col,
+        reintegro: colReintegro,
         numberHits,
         hitNumbers,
         hasComplementario,
@@ -290,7 +357,7 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
         prizeCategory,
       };
     });
-  }, [result, activeDrawInfo]);
+  }, [result, activeDrawInfo, columnReintegros]);
 
   // Summary counts of scrutiny
   const scrutinySummary = useMemo(() => {
@@ -304,6 +371,7 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
       0: 0,
     };
     let count5WithComplementary = 0;
+    let reintegrosWonCount = 0;
     let totalPrizes = 0;
     let maxHits = 0;
 
@@ -313,6 +381,9 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
       if (col.numberHits === 5 && col.hasComplementario) {
         count5WithComplementary++;
       }
+      if (col.hasReintegro) {
+        reintegrosWonCount++;
+      }
       if (col.isPrize) {
         totalPrizes++;
       }
@@ -321,6 +392,7 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
     return {
       hitsCountMap,
       count5WithComplementary,
+      reintegrosWonCount,
       totalPrizes,
       maxHits,
     };
@@ -438,12 +510,8 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
       }
     });
 
-    let reintegroHit = false;
-    if (activeDrawInfo && activeDrawInfo.reintegro !== undefined) {
-      if (result.selectedNumbers.includes(activeDrawInfo.reintegro)) {
-        reintegroHit = true;
-      }
-    }
+    const reintegrosWonCount = evaluatedColumns.filter((c) => c.hasReintegro).length;
+    const reintegroHit = reintegrosWonCount > 0;
 
     if (result.game === 'euromillones') {
       const euroCategories = [
@@ -500,13 +568,13 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
         }
       });
 
-      if (reintegroHit) {
+      if (reintegrosWonCount > 0) {
         const reintegroVal = effectivePrices['Reintegro'] ?? result.pricePerBet;
-        const reintegroTotal = result.columnsCount * reintegroVal;
+        const reintegroTotal = reintegrosWonCount * reintegroVal;
         totalWon += reintegroTotal;
         categoryBreakdown.push({
-          category: 'Reintegro (Reembolso de apuestas)',
-          count: result.columnsCount,
+          category: `Reintegro (R: ${activeDrawInfo?.reintegro})`,
+          count: reintegrosWonCount,
           amountPerPrize: reintegroVal,
           totalCategory: reintegroTotal,
           key: 'Reintegro',
@@ -524,6 +592,7 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
       roi,
       categoryBreakdown,
       reintegroHit,
+      reintegrosWonCount,
       effectivePrices,
     };
   }, [result, evaluatedColumns, activeDrawInfo, customPrizeValues]);
@@ -535,6 +604,8 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
     if (activeDrawInfo) {
       if (hitsFilter === 'prizes_only') {
         list = list.filter((c) => c.isPrize);
+      } else if (hitsFilter === 'reintegro') {
+        list = list.filter((c) => c.hasReintegro);
       } else if (typeof hitsFilter === 'number') {
         list = list.filter((c) => c.numberHits === hitsFilter);
       }
@@ -549,6 +620,9 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
           }
           if (b.hasComplementario !== a.hasComplementario) {
             return b.hasComplementario ? 1 : -1;
+          }
+          if (b.hasReintegro !== a.hasReintegro) {
+            return b.hasReintegro ? 1 : -1;
           }
           return a.id - b.id;
         });
@@ -586,7 +660,9 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
     const lines = result.columns.map((col) => {
       const numStr = col.numbers.map((n) => n.toString().padStart(2, '0')).join(' ');
       const starStr = col.stars ? ` [★ ${col.stars.join(' ')}]` : '';
-      return `Col ${col.id.toString().padStart(2, '0')}: ${numStr}${starStr}`;
+      const r = columnReintegros[col.id];
+      const rStr = r !== undefined ? ` [R: ${r}]` : '';
+      return `Col ${col.id.toString().padStart(2, '0')}: ${numStr}${starStr}${rStr}`;
     });
 
     const textToCopy = `=== ${result.game.toUpperCase()} - SISTEMA REDUCIDO ===\nGarantía: ${plan.name}\nNúmeros jugados (${result.selectedNumbers.length}): ${result.selectedNumbers.join(', ')}\nTotal Apuestas: ${result.columnsCount} columnas\nPrecio Total: ${result.totalCost.toFixed(2)} €\n\n${lines.join('\n')}`;
@@ -600,7 +676,9 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
     const lines = result.columns.map((col) => {
       const numStr = col.numbers.map((n) => n.toString().padStart(2, '0')).join(' ');
       const starStr = col.stars ? `  [Estrellas: ${col.stars.join(', ')}]` : '';
-      return `Apuesta #${col.id.toString().padStart(2, '0')}: ${numStr}${starStr}`;
+      const r = columnReintegros[col.id];
+      const rStr = r !== undefined ? `  [Reintegro: ${r}]` : '';
+      return `Apuesta #${col.id.toString().padStart(2, '0')}: ${numStr}${starStr}${rStr}`;
     });
 
     const textContent = `==============================================\n${result.game.toUpperCase()} - SISTEMA REDUCIDO\n==============================================\nGarantía: ${plan.name}\nNúmeros elegidos (${result.selectedNumbers.length}): ${result.selectedNumbers.join(', ')}\n${result.selectedStars ? `Estrellas: ${result.selectedStars.join(', ')}\n` : ''}Total columnas: ${result.columnsCount}\nPrecio por apuesta: ${result.pricePerBet.toFixed(2)} €\nImporte Total: ${result.totalCost.toFixed(2)} €\nFecha: ${new Date().toLocaleString('es-ES')}\n==============================================\n\n${lines.join('\n')}\n`;
@@ -618,7 +696,7 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
     const isEuro = result.game === 'euromillones';
     const headers = isEuro
       ? ['Columna', 'N1', 'N2', 'N3', 'N4', 'N5', 'Estrella1', 'Estrella2', 'Pares', 'Impares', 'Suma']
-      : ['Columna', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'Pares', 'Impares', 'Suma'];
+      : ['Columna', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'Reintegro', 'Pares', 'Impares', 'Suma'];
 
     const rows = result.columns.map((col) => {
       const evenCount = col.numbers.filter((n) => n % 2 === 0).length;
@@ -648,6 +726,7 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
           col.numbers[3] ?? '',
           col.numbers[4] ?? '',
           col.numbers[5] ?? '',
+          columnReintegros[col.id] ?? '',
           evenCount,
           oddCount,
           sum,
@@ -1726,19 +1805,97 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
               </div>
             </div>
 
+            {/* ----------------------------------------------------------------- */}
+            {/* PANEL DE ASIGNACIÓN DE REINTEGROS (ADMINISTRACIÓN / BOLETO)       */}
+            {/* ----------------------------------------------------------------- */}
+            {result.game !== 'euromillones' && (
+              <div className="bg-blue-50/70 border border-blue-200/90 rounded-2xl p-3 sm:p-4 space-y-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-black text-blue-950 flex items-center gap-1.5">
+                        <Tag className="w-4 h-4 text-blue-600" />
+                        Reintegro asignado por la Administración (0 - 9)
+                      </span>
+                      {activeDrawInfo?.reintegro !== undefined && (
+                        <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-blue-700 text-white shadow-2xs">
+                          R. Ganador Sorteo: {activeDrawInfo.reintegro}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-blue-800/85 mt-0.5">
+                      Al validar tus apuestas, el terminal de Loterías imprime el reintegro en el resguardo.
+                      Asígnalo para comprobar los reembolsos de tus columnas:
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 self-start sm:self-auto shrink-0 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={handleSimulateBoletoReintegros}
+                      className="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-white border border-blue-300 text-blue-800 hover:bg-blue-100/80 transition shadow-2xs cursor-pointer flex items-center gap-1"
+                      title="Asigna reintegros aleatorios por cada boleto oficial de 8 apuestas como hace el terminal de Loterías"
+                    >
+                      <span>🎲 Aleatorio por boleto (8 ap.)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleClearReintegros}
+                      className="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-white/90 border border-slate-200 text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                      title="Limpiar todos los reintegros asignados"
+                    >
+                      Limpiar
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quick set for all columns */}
+                <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-blue-200/60">
+                  <span className="text-xs font-bold text-blue-900 mr-1">
+                    Mismo reintegro en todas las columnas:
+                  </span>
+                  {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => {
+                    const isSelected = bulkReintegro === num;
+                    const isWinning = activeDrawInfo?.reintegro === num;
+                    return (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => handleSetAllReintegros(num)}
+                        className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full text-xs font-black transition cursor-pointer shadow-2xs ${
+                          isSelected
+                            ? 'bg-blue-700 text-white ring-2 ring-blue-400 scale-105'
+                            : isWinning
+                            ? 'bg-blue-100 text-blue-950 border-2 border-blue-500 font-black hover:bg-blue-200'
+                            : 'bg-white text-blue-900 border border-blue-200 hover:bg-blue-100/70'
+                        }`}
+                        title={`Asignar Reintegro ${num} a todas las apuestas`}
+                      >
+                        {num}
+                      </button>
+                    );
+                  })}
+
+                  <span className="text-[11px] text-blue-700/80 sm:ml-auto font-medium">
+                    (o cámbialo en cada columna abajo)
+                  </span>
+                </div>
+              </div>
+            )}
+
             {/* Scrutiny Breakdown Cards */}
             <div>
               <div className="text-xs font-bold text-slate-700 mb-2 flex items-center justify-between">
                 <span>Desglose de premios y aciertos en tus {result.columnsCount} columnas:</span>
                 <span className="font-extrabold text-slate-900">
-                  Total columnas con premio (≥3 ac.):{' '}
+                  Total columnas con premio:{' '}
                   <strong className="text-emerald-700 font-black">
                     {scrutinySummary.totalPrizes}
                   </strong>
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2">
+              <div className={`grid grid-cols-2 sm:grid-cols-4 ${result.game !== 'euromillones' ? 'md:grid-cols-7' : 'md:grid-cols-6'} gap-2`}>
                 {/* 6 aciertos */}
                 <button
                   type="button"
@@ -1858,6 +2015,31 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
                   </span>
                   <span className="text-[10px] block text-slate-500">columnas</span>
                 </div>
+
+                {/* Reintegro card (Primitiva / Bonoloto) */}
+                {result.game !== 'euromillones' && (
+                  <button
+                    type="button"
+                    onClick={() => setHitsFilter(hitsFilter === 'reintegro' ? 'all' : 'reintegro')}
+                    className={`p-2.5 rounded-xl border text-center transition cursor-pointer ${
+                      hitsFilter === 'reintegro'
+                        ? 'ring-2 ring-blue-500 bg-blue-100 border-blue-400 font-black'
+                        : scrutinySummary.reintegrosWonCount > 0
+                        ? 'bg-blue-50 border-blue-300 text-blue-950 font-bold hover:bg-blue-100'
+                        : 'bg-slate-50 border-slate-200 text-slate-400 opacity-60'
+                    }`}
+                  >
+                    <span className="text-[10px] block uppercase font-semibold text-blue-700">
+                      Reintegro {activeDrawInfo?.reintegro !== undefined ? `(R: ${activeDrawInfo.reintegro})` : ''}
+                    </span>
+                    <span className="text-lg font-black text-blue-900">
+                      {scrutinySummary.reintegrosWonCount}
+                    </span>
+                    <span className="text-[10px] block text-slate-500">
+                      {scrutinySummary.reintegrosWonCount > 0 ? 'reembolsos' : 'aciertos'}
+                    </span>
+                  </button>
+                )}
               </div>
 
               {/* View filters and sorting */}
@@ -1889,6 +2071,19 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
                   >
                     Solo premiadas ({scrutinySummary.totalPrizes})
                   </button>
+                  {result.game !== 'euromillones' && (
+                    <button
+                      type="button"
+                      onClick={() => setHitsFilter(hitsFilter === 'reintegro' ? 'all' : 'reintegro')}
+                      className={`px-2.5 py-1 rounded-lg font-bold border transition cursor-pointer ${
+                        hitsFilter === 'reintegro'
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-white text-blue-800 border-blue-200 hover:bg-blue-50'
+                      }`}
+                    >
+                      Con Reintegro ({scrutinySummary.reintegrosWonCount})
+                    </button>
+                  )}
                 </div>
 
                 <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -2123,8 +2318,8 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           {displayedColumns.map((col) => {
-            const isTopPrize = activeDrawInfo && col.numberHits >= 5;
-            const isMediumPrize = activeDrawInfo && col.numberHits >= 3;
+            const isTopPrize = activeDrawInfo && (col.numberHits >= 5 || (col.numberHits === 6 && col.hasReintegro));
+            const isMediumPrize = activeDrawInfo && (col.numberHits >= 3 || col.hasReintegro);
 
             return (
               <div
@@ -2134,14 +2329,52 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
                   isTopPrize
                     ? 'bg-gradient-to-b from-amber-50 to-emerald-50/80 border-emerald-500 ring-2 ring-emerald-400/50 shadow-md scale-[1.01]'
                     : isMediumPrize
-                    ? 'bg-emerald-50/70 border-emerald-400 ring-1 ring-emerald-300/40 shadow-xs'
+                    ? col.numberHits >= 3
+                      ? 'bg-emerald-50/70 border-emerald-400 ring-1 ring-emerald-300/40 shadow-xs'
+                      : 'bg-blue-50/70 border-blue-400 ring-1 ring-blue-300/40 shadow-xs'
                     : 'bg-slate-50/70 border-slate-200 hover:border-slate-300'
                 }`}
               >
-                <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-slate-200/80">
-                  <span className="text-xs font-bold font-mono text-slate-600 bg-white px-2 py-0.5 rounded-md border border-slate-200">
-                    Columna {col.id.toString().padStart(2, '0')}
-                  </span>
+                <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-slate-200/80 flex-wrap gap-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold font-mono text-slate-600 bg-white px-2 py-0.5 rounded-md border border-slate-200">
+                      Columna {col.id.toString().padStart(2, '0')}
+                    </span>
+
+                    {/* Reintegro selector/indicator for Primitiva & Bonoloto */}
+                    {result.game !== 'euromillones' && (
+                      <div className="flex items-center gap-1">
+                        <label htmlFor={`col-reintegro-select-${col.id}`} className="sr-only">
+                          Reintegro Columna {col.id}
+                        </label>
+                        <select
+                          id={`col-reintegro-select-${col.id}`}
+                          value={col.reintegro !== undefined ? col.reintegro : ''}
+                          onChange={(e) =>
+                            handleSetColumnReintegro(
+                              col.id,
+                              e.target.value === '' ? undefined : Number(e.target.value)
+                            )
+                          }
+                          className={`text-xs font-black px-1.5 py-0.5 rounded-md border transition cursor-pointer ${
+                            col.hasReintegro
+                              ? 'bg-blue-600 text-white border-blue-700 ring-2 ring-blue-400 shadow-2xs font-extrabold'
+                              : col.reintegro !== undefined
+                              ? 'bg-blue-50 text-blue-900 border-blue-300 font-bold'
+                              : 'bg-white text-slate-400 border-dashed border-slate-300 hover:border-slate-400'
+                          }`}
+                          title="Haz clic para seleccionar el reintegro de este resguardo/columna"
+                        >
+                          <option value="">R: —</option>
+                          {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((r) => (
+                            <option key={r} value={r}>
+                              R: {r}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Scrutiny badge */}
                   {activeDrawInfo && (
@@ -2155,6 +2388,8 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
                           ? 'bg-blue-600 text-white'
                           : col.numberHits === 3
                           ? 'bg-teal-600 text-white'
+                          : col.hasReintegro
+                          ? 'bg-blue-600 text-white ring-1 ring-blue-300'
                           : col.numberHits === 2
                           ? 'bg-slate-200 text-slate-700'
                           : 'bg-slate-100 text-slate-400'
@@ -2164,6 +2399,7 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
                       <span>
                         {col.numberHits} aciertos
                         {col.hasComplementario && ' + C'}
+                        {col.hasReintegro && ' + R'}
                       </span>
                     </span>
                   )}
@@ -2223,6 +2459,19 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
                         </div>
                       );
                     })}
+                  </div>
+                )}
+
+                {/* Reintegro refund callout if matched */}
+                {col.hasReintegro && (
+                  <div className="mt-2.5 pt-1.5 border-t border-blue-200/80 flex items-center justify-between text-[11px] font-bold text-blue-900 bg-blue-100/70 px-2 py-0.5 rounded-md">
+                    <span className="flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-blue-700" />
+                      Reintegro Acertado (R: {col.reintegro})
+                    </span>
+                    <span className="font-black text-blue-950">
+                      Reembolso: +{result.pricePerBet.toFixed(2)} €
+                    </span>
                   </div>
                 )}
               </div>
