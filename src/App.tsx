@@ -537,6 +537,8 @@ export default function App() {
                 onPrint={handlePrint}
                 onAddDraw={handleAddDraw}
                 onSavedCombination={() => setSavedCombinationsCount(getSavedCombinations().length)}
+                onSyncDatabase={() => handleSyncDatabase(false)}
+                isSyncingDatabase={isSyncing}
               />
             )}
           </div>

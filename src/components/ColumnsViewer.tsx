@@ -28,6 +28,7 @@ import {
   Info,
   Sliders,
   FolderPlus,
+  RefreshCw,
 } from 'lucide-react';
 import { SaveCombinationDialog } from './SaveCombinationDialog';
 
@@ -37,6 +38,8 @@ interface ColumnsViewerProps {
   onPrint: () => void;
   onAddDraw?: (draw: LotteryDraw) => void;
   onSavedCombination?: () => void;
+  onSyncDatabase?: () => Promise<void> | void;
+  isSyncingDatabase?: boolean;
 }
 
 type CheckerMode = 'none' | 'auto' | 'manual' | 'guarantee';
@@ -47,6 +50,8 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
   onPrint,
   onAddDraw,
   onSavedCombination,
+  onSyncDatabase,
+  isSyncingDatabase = false,
 }) => {
   const [copied, setCopied] = useState(false);
 
@@ -1302,16 +1307,32 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
                 <span>Elegir sorteo del histórico oficial para comprobar:</span>
               </label>
 
-              {gameDraws.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedDrawId(gameDraws[0].id)}
-                  className="text-xs text-indigo-700 font-bold hover:underline self-start sm:self-auto"
-                >
-                  &larr; Comprobar con el último sorteo ({gameDraws[0].dayOfWeek},{' '}
-                  {gameDraws[0].date})
-                </button>
-              )}
+              <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+                {onSyncDatabase && (
+                  <button
+                    type="button"
+                    id="btn-update-db-escrutador"
+                    onClick={() => onSyncDatabase()}
+                    disabled={isSyncingDatabase}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition active:scale-95 cursor-pointer disabled:opacity-50"
+                    title="Actualizar base de datos para descargar sorteos recientes (incluyendo el de ayer)"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSyncingDatabase ? 'animate-spin' : ''}`} />
+                    <span>{isSyncingDatabase ? 'Actualizando BD...' : 'Actualizar Base de Datos'}</span>
+                  </button>
+                )}
+
+                {gameDraws.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDrawId(gameDraws[0].id)}
+                    className="text-xs text-indigo-700 font-bold hover:underline"
+                  >
+                    &larr; Comprobar con el último sorteo ({gameDraws[0].dayOfWeek},{' '}
+                    {gameDraws[0].date})
+                  </button>
+                )}
+              </div>
             </div>
 
             {gameDraws.length === 0 ? (

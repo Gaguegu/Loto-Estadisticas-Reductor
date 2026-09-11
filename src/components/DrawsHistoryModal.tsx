@@ -259,19 +259,20 @@ export const DrawsHistoryModal: React.FC<DrawsHistoryModalProps> = ({
               id="modal-sync-database-btn"
               onClick={onSyncDatabase}
               disabled={isSyncing}
-              className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-bold text-xs transition active:scale-95 shadow-md shrink-0 ${
+              className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-bold text-xs transition active:scale-95 shadow-md shrink-0 cursor-pointer ${
                 missingDrawsCount > 0
                   ? 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 ring-2 ring-amber-300/30'
-                  : 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700'
+                  : 'bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-500'
               } ${isSyncing ? 'opacity-75 cursor-wait' : ''}`}
+              title="Actualizar la base de datos con los sorteos oficiales celebrados"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
               <span>
                 {isSyncing
-                  ? 'Verificando...'
+                  ? 'Actualizando...'
                   : missingDrawsCount > 0
-                  ? `Sincronizar Oficiales (+${missingDrawsCount})`
-                  : 'Verificar Base de Datos'}
+                  ? `Actualizar Base de Datos (+${missingDrawsCount})`
+                  : 'Actualizar Base de Datos'}
               </span>
             </button>
           </div>

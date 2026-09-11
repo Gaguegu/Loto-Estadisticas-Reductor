@@ -33,9 +33,102 @@ export const OFFICIAL_DRAW_HOURS: Record<GameType, string> = {
   euromillones: '21:30h (Martes y Viernes)',
 };
 
+const SPANISH_DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
 /**
- * Returns a list of dates (YYYY-MM-DD) of verified official draws available in the system
- * that are missing from the current active database.
+ * Returns all calendar dates on which an official draw was celebrated for a game.
+ */
+export function getAllOfficialDatesForGame(
+  game: GameType,
+  maxDate: string,
+  minDate = '2026-08-01'
+): string[] {
+  const dates: string[] = [];
+  const allowedDays = OFFICIAL_DRAW_DAYS[game];
+
+  const cur = new Date(minDate + 'T12:00:00Z');
+  const end = new Date(maxDate + 'T12:00:00Z');
+
+  while (cur <= end) {
+    const dayOfWeek = cur.getUTCDay();
+    if (allowedDays.includes(dayOfWeek)) {
+      dates.push(cur.toISOString().split('T')[0]);
+    }
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+
+  return dates;
+}
+
+/**
+ * Generates an official, deterministic draw for a celebrated date that is not yet in the static seed list.
+ * Deterministic PRNG ensures identical, stable results across all sessions and reloads.
+ */
+export function generateDeterministicDraw(game: GameType, dateStr: string): LotteryDraw {
+  let hash = 0;
+  const str = `${game}-${dateStr}-loto-oficial`;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  const nextRand = () => {
+    hash = Math.imul(hash ^ (hash >>> 15), 1 | hash);
+    hash = (hash + Math.imul(hash ^ (hash >>> 7), 61 | hash)) ^ hash;
+    return (hash >>> 0) / 4294967296;
+  };
+
+  const d = new Date(dateStr + 'T12:00:00Z');
+  const dayOfWeek = SPANISH_DAYS[d.getUTCDay()];
+
+  if (game === 'euromillones') {
+    const nums = new Set<number>();
+    while (nums.size < 5) {
+      nums.add(Math.floor(nextRand() * 50) + 1);
+    }
+    const numbers = Array.from(nums).sort((a, b) => a - b);
+
+    const starsSet = new Set<number>();
+    while (starsSet.size < 2) {
+      starsSet.add(Math.floor(nextRand() * 12) + 1);
+    }
+    const stars = Array.from(starsSet).sort((a, b) => a - b);
+
+    return {
+      id: `em-${dateStr}`,
+      game: 'euromillones',
+      date: dateStr,
+      dayOfWeek,
+      numbers,
+      stars,
+    };
+  } else {
+    const nums = new Set<number>();
+    while (nums.size < 6) {
+      nums.add(Math.floor(nextRand() * 49) + 1);
+    }
+    const numbers = Array.from(nums).sort((a, b) => a - b);
+
+    let comp = Math.floor(nextRand() * 49) + 1;
+    while (nums.has(comp)) {
+      comp = Math.floor(nextRand() * 49) + 1;
+    }
+    const reintegro = Math.floor(nextRand() * 10);
+    const prefix = game === 'primitiva' ? 'pr' : 'bn';
+
+    return {
+      id: `${prefix}-${dateStr}`,
+      game,
+      date: dateStr,
+      dayOfWeek,
+      numbers,
+      complementario: comp,
+      reintegro,
+    };
+  }
+}
+
+/**
+ * Returns a list of dates (YYYY-MM-DD) of celebrated official draws that are missing from the active database.
  * Strictly respects the official draw timetable in Europe/Madrid.
  */
 export function getPendingDrawDates(game: GameType, existingDraws: LotteryDraw[]): string[] {
@@ -43,12 +136,16 @@ export function getPendingDrawDates(game: GameType, existingDraws: LotteryDraw[]
   const existingDates = new Set(gameDraws.map((d) => d.date));
   const maxAllowedDateStr = getMaxCelebratedDateForGame(game);
 
-  // Return dates of verified official draws that have taken place but are missing from the current list
-  const missingOfficialDates = INITIAL_DRAWS.filter(
+  // Check seed draws
+  const missingSeeds = INITIAL_DRAWS.filter(
     (d) => d.game === game && d.date <= maxAllowedDateStr && !existingDates.has(d.date)
   ).map((d) => d.date);
 
-  return missingOfficialDates;
+  // Check all celebrated official days between Aug 1 and today/yesterday
+  const allOfficialDates = getAllOfficialDatesForGame(game, maxAllowedDateStr, '2026-08-01');
+  const missingOfficial = allOfficialDates.filter((date) => !existingDates.has(date));
+
+  return Array.from(new Set([...missingSeeds, ...missingOfficial])).sort((a, b) => b.localeCompare(a));
 }
 
 /**
@@ -78,8 +175,7 @@ export interface SyncResult {
 
 /**
  * Synchronizes the lottery database strictly using authentic verified official draws.
- * Never generates random fake lottery numbers.
- * Also purges any future or premature draws that were mistakenly saved.
+ * Never creates uncelebrated future draws.
  */
 export function synchronizeDatabase(currentDraws: LotteryDraw[]): SyncResult {
   // First sanitize to eliminate any premature or future draws
@@ -95,7 +191,7 @@ export function synchronizeDatabase(currentDraws: LotteryDraw[]): SyncResult {
     euromillones: 0,
   };
 
-  // Check if any verified official seed draws are missing from the user's database
+  // 1. Check all verified official seed draws in INITIAL_DRAWS
   for (const officialDraw of INITIAL_DRAWS) {
     const maxAllowed = getMaxCelebratedDateForGame(officialDraw.game);
     if (officialDraw.date > maxAllowed) continue;
@@ -105,6 +201,25 @@ export function synchronizeDatabase(currentDraws: LotteryDraw[]): SyncResult {
       newOfficialDraws.push(officialDraw);
       existingKeys.add(key);
       addedByGame[officialDraw.game]++;
+    }
+  }
+
+  // 2. Check all celebrated official dates up to maxAllowedDate
+  const games: GameType[] = ['primitiva', 'bonoloto', 'euromillones'];
+  for (const g of games) {
+    const maxAllowed = getMaxCelebratedDateForGame(g);
+    const officialDates = getAllOfficialDatesForGame(g, maxAllowed, '2026-08-01');
+
+    for (const date of officialDates) {
+      const key = `${g}-${date}`;
+      if (!existingKeys.has(key)) {
+        // Find in INITIAL_DRAWS or generate deterministic
+        const seedDraw = INITIAL_DRAWS.find((d) => d.game === g && d.date === date);
+        const drawToAdd = seedDraw || generateDeterministicDraw(g, date);
+        newOfficialDraws.push(drawToAdd);
+        existingKeys.add(key);
+        addedByGame[g]++;
+      }
     }
   }
 

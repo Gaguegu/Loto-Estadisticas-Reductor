@@ -137,15 +137,15 @@ export const Header: React.FC<HeaderProps> = ({
               id="header-sync-db-btn"
               onClick={onSyncDatabase}
               disabled={isSyncing}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition active:scale-95 border shadow-xs ${
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition active:scale-95 border shadow-xs cursor-pointer ${
                 isEuro
-                  ? 'bg-slate-950/10 hover:bg-slate-950/20 border-slate-950/25 text-slate-950'
-                  : 'bg-white/15 hover:bg-white/25 border-white/30 text-white'
+                  ? 'bg-slate-950/15 hover:bg-slate-950/25 border-slate-950/30 text-slate-950'
+                  : 'bg-white/20 hover:bg-white/30 border-white/35 text-white'
               } ${isSyncing ? 'opacity-75 cursor-wait' : ''}`}
               title={
                 missingDrawsCount > 0
-                  ? `Hay ${missingDrawsCount} sorteos oficiales pendientes. Haz clic para sincronizar.`
-                  : 'Base de datos al día con los sorteos oficiales celebrados de Loterías y Apuestas del Estado.'
+                  ? `Hay ${missingDrawsCount} sorteos oficiales pendientes. Pulsa para actualizar la base de datos.`
+                  : 'Actualizar base de datos con los últimos sorteos oficiales de Loterías y Apuestas del Estado'
               }
             >
               <RefreshCw
@@ -158,17 +158,17 @@ export const Header: React.FC<HeaderProps> = ({
                 }`}
               />
               <span className="hidden sm:inline">
-                {isSyncing ? 'Verificando BD...' : missingDrawsCount > 0 ? 'Actualizar BD' : 'Sorteos Oficiales'}
+                {isSyncing ? 'Actualizando BD...' : 'Actualizar BD'}
               </span>
               <span className="sm:hidden">
-                {isSyncing ? '...' : 'Sorteos'}
+                {isSyncing ? '...' : 'Actualizar BD'}
               </span>
               {missingDrawsCount > 0 && !isSyncing && (
                 <span
                   className={`font-black text-[10px] px-1.5 py-0.5 rounded-full shadow-xs ${
                     isEuro
                       ? 'bg-slate-950 text-amber-300'
-                      : 'bg-white text-slate-900'
+                      : 'bg-amber-400 text-slate-950'
                   }`}
                 >
                   +{missingDrawsCount}
