@@ -105,73 +105,80 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
   const [bulkReintegro, setBulkReintegro] = useState<number | undefined>(undefined);
   const [reintegroMode, setReintegroMode] = useState<'by_boleto' | 'all'>('by_boleto');
 
-  // Sync if columns change
-  useEffect(() => {
-    setColumnReintegros((prev) => {
-      const next: Record<number, number | undefined> = {};
-      result.columns.forEach((col) => {
-        next[col.id] = prev[col.id] ?? col.reintegro;
-      });
-      return next;
-    });
-  }, [result.columns]);
+  // Sync ONLY when a fresh reduction combination is generated (different columns length, game or first column ID)
+  const prevColsSignature = useRef<string>(
+    `${result.game}-${result.guarantee}-${result.columns.length}-${result.columns[0]?.id || 0}`
+  );
 
-  // Propagate updated reintegros to parent component
   useEffect(() => {
-    if (onUpdateColumnReintegros) {
-      onUpdateColumnReintegros(columnReintegros);
+    const currentSignature = `${result.game}-${result.guarantee}-${result.columns.length}-${result.columns[0]?.id || 0}`;
+    if (prevColsSignature.current !== currentSignature) {
+      prevColsSignature.current = currentSignature;
+      const initial: Record<number, number | undefined> = {};
+      result.columns.forEach((col) => {
+        initial[col.id] = col.reintegro;
+      });
+      setColumnReintegros(initial);
+      setBulkReintegro(undefined);
     }
-  }, [columnReintegros, onUpdateColumnReintegros]);
+  }, [result.game, result.guarantee, result.columns]);
 
   const handleSetAllReintegros = (reintegro: number) => {
     setBulkReintegro(reintegro);
-    setColumnReintegros(() => {
-      const updated: Record<number, number | undefined> = {};
-      result.columns.forEach((col) => {
-        updated[col.id] = reintegro;
-      });
-      return updated;
+    const updated: Record<number, number | undefined> = {};
+    result.columns.forEach((col) => {
+      updated[col.id] = reintegro;
     });
+    setColumnReintegros(updated);
+    if (onUpdateColumnReintegros) {
+      onUpdateColumnReintegros(updated);
+    }
   };
 
   // Set reintegro for an official 8-column ticket block (1-8, 9-16, 17-24...)
   const handleSetBoletoReintegro = (boletoIndex: number, reintegro: number) => {
     const startIdx = boletoIndex * 8;
     const endIdx = Math.min(startIdx + 8, result.columns.length);
-    setColumnReintegros((prev) => {
-      const updated = { ...prev };
-      for (let i = startIdx; i < endIdx; i++) {
-        const col = result.columns[i];
-        if (col) {
-          updated[col.id] = reintegro;
-        }
+    const updated: Record<number, number | undefined> = { ...columnReintegros };
+    for (let i = startIdx; i < endIdx; i++) {
+      const col = result.columns[i];
+      if (col) {
+        updated[col.id] = reintegro;
       }
-      return updated;
-    });
+    }
+    setColumnReintegros(updated);
     setBulkReintegro(undefined);
+    if (onUpdateColumnReintegros) {
+      onUpdateColumnReintegros(updated);
+    }
   };
 
   const handleClearBoletoReintegro = (boletoIndex: number) => {
     const startIdx = boletoIndex * 8;
     const endIdx = Math.min(startIdx + 8, result.columns.length);
-    setColumnReintegros((prev) => {
-      const updated = { ...prev };
-      for (let i = startIdx; i < endIdx; i++) {
-        const col = result.columns[i];
-        if (col) {
-          updated[col.id] = undefined;
-        }
+    const updated: Record<number, number | undefined> = { ...columnReintegros };
+    for (let i = startIdx; i < endIdx; i++) {
+      const col = result.columns[i];
+      if (col) {
+        updated[col.id] = undefined;
       }
-      return updated;
-    });
+    }
+    setColumnReintegros(updated);
     setBulkReintegro(undefined);
+    if (onUpdateColumnReintegros) {
+      onUpdateColumnReintegros(updated);
+    }
   };
 
   const handleSetColumnReintegro = (colId: number, reintegro: number | undefined) => {
-    setColumnReintegros((prev) => ({
-      ...prev,
+    const updated: Record<number, number | undefined> = {
+      ...columnReintegros,
       [colId]: reintegro,
-    }));
+    };
+    setColumnReintegros(updated);
+    if (onUpdateColumnReintegros) {
+      onUpdateColumnReintegros(updated);
+    }
   };
 
   const handleSimulateBoletoReintegros = () => {
@@ -185,11 +192,21 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
     });
     setColumnReintegros(updated);
     setBulkReintegro(undefined);
+    if (onUpdateColumnReintegros) {
+      onUpdateColumnReintegros(updated);
+    }
   };
 
   const handleClearReintegros = () => {
-    setColumnReintegros({});
+    const cleared: Record<number, number | undefined> = {};
+    result.columns.forEach((col) => {
+      cleared[col.id] = undefined;
+    });
+    setColumnReintegros(cleared);
     setBulkReintegro(undefined);
+    if (onUpdateColumnReintegros) {
+      onUpdateColumnReintegros(cleared);
+    }
   };
 
   // Favorites & Peña Save State
@@ -1938,8 +1955,9 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
                   <div className="flex items-center gap-1.5 self-start sm:self-auto shrink-0 flex-wrap">
                     <button
                       type="button"
+                      id="btn-simulate-boleto-reintegros"
                       onClick={handleSimulateBoletoReintegros}
-                      className="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-white border border-blue-300 text-blue-800 hover:bg-blue-100/80 transition shadow-2xs cursor-pointer flex items-center gap-1.5"
+                      className="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-white border border-blue-300 text-blue-800 hover:bg-blue-100/80 transition shadow-2xs cursor-pointer flex items-center gap-1.5 active:scale-95"
                       title="Asigna reintegros aleatorios por cada boleto oficial de 8 apuestas como hace el terminal de Loterías"
                     >
                       <Sparkles className="w-3.5 h-3.5 text-blue-600" />
@@ -1947,11 +1965,13 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
                     </button>
                     <button
                       type="button"
+                      id="btn-clear-reintegros-all"
                       onClick={handleClearReintegros}
-                      className="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-white/90 border border-slate-200 text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                      className="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 hover:text-red-700 hover:border-red-300 transition cursor-pointer flex items-center gap-1 active:scale-95 shadow-2xs"
                       title="Limpiar todos los reintegros asignados"
                     >
-                      Limpiar todos
+                      <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Limpiar todo</span>
                     </button>
                   </div>
                 </div>

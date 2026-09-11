@@ -45,6 +45,8 @@ export interface SavedCombination {
 
 export type ReductionGuarantee = 'direct' | 'guarantee_5' | 'guarantee_4' | 'guarantee_3';
 
+export type SelectionCriterion = 'frequency' | 'delay_desc' | 'delay_asc' | 'balanced';
+
 export interface ReductionPlan {
   id: string;
   name: string;
