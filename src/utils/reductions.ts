@@ -261,6 +261,19 @@ export function generateReducedColumns(
     columnsRaw = generateGreedyCover(sortedNumbers, 5, targetMatch, 5);
   }
 
+  // Sort each combination's numbers ascending
+  columnsRaw.forEach((col) => col.sort((a, b) => a - b));
+
+  // Sort combinations in natural canonical lottery order (lowest numbers first)
+  columnsRaw.sort((a, b) => {
+    for (let i = 0; i < Math.min(a.length, b.length); i++) {
+      if (a[i] !== b[i]) {
+        return a[i] - b[i];
+      }
+    }
+    return a.length - b.length;
+  });
+
   // Handle Stars for Euromillones
   const finalColumns: GeneratedColumn[] = [];
 

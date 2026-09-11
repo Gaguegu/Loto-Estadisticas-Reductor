@@ -86,9 +86,9 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
   // Guarantee theoretical simulator state
   const [guaranteeTestDraw, setGuaranteeTestDraw] = useState<number[]>([]);
 
-  // Columns filter and sorting in scrutiny
+  // Columns filter and sorting in scrutiny (default to natural column order 1..N)
   const [hitsFilter, setHitsFilter] = useState<'all' | 'prizes_only' | 'reintegro' | number>('all');
-  const [sortByHits, setSortByHits] = useState<boolean>(true);
+  const [sortByHits, setSortByHits] = useState<boolean>(false);
 
   // Reintegro assigned to each column (for Primitiva and Bonoloto)
   const [columnReintegros, setColumnReintegros] = useState<Record<number, number | undefined>>(() => {
@@ -609,24 +609,6 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
       } else if (typeof hitsFilter === 'number') {
         list = list.filter((c) => c.numberHits === hitsFilter);
       }
-
-      if (sortByHits) {
-        list.sort((a, b) => {
-          if (b.numberHits !== a.numberHits) {
-            return b.numberHits - a.numberHits;
-          }
-          if (b.starHits !== a.starHits) {
-            return b.starHits - a.starHits;
-          }
-          if (b.hasComplementario !== a.hasComplementario) {
-            return b.hasComplementario ? 1 : -1;
-          }
-          if (b.hasReintegro !== a.hasReintegro) {
-            return b.hasReintegro ? 1 : -1;
-          }
-          return a.id - b.id;
-        });
-      }
     }
 
     // Parity filter
@@ -650,6 +632,27 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
         if (sumRangeFilter === 'alto') return sum > optMax;
         return true;
       });
+    }
+
+    // Sorting: default to natural column order (Columna 01, Columna 02, Columna 03, ...)
+    if (sortByHits && activeDrawInfo) {
+      list.sort((a, b) => {
+        if (b.numberHits !== a.numberHits) {
+          return b.numberHits - a.numberHits;
+        }
+        if (b.starHits !== a.starHits) {
+          return b.starHits - a.starHits;
+        }
+        if (b.hasComplementario !== a.hasComplementario) {
+          return b.hasComplementario ? 1 : -1;
+        }
+        if (b.hasReintegro !== a.hasReintegro) {
+          return b.hasReintegro ? 1 : -1;
+        }
+        return a.id - b.id;
+      });
+    } else {
+      list.sort((a, b) => a.id - b.id);
     }
 
     return list;
@@ -2086,18 +2089,32 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
                   )}
                 </div>
 
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={sortByHits}
-                    onChange={(e) => setSortByHits(e.target.checked)}
-                    className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
-                  />
-                  <span className="font-bold text-slate-700 flex items-center gap-1">
-                    <ArrowUpDown className="w-3.5 h-3.5 text-indigo-600" />
-                    Ordenar columnas con más aciertos arriba
-                  </span>
-                </label>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-xs font-medium text-slate-500">Orden:</span>
+                  <button
+                    type="button"
+                    onClick={() => setSortByHits(false)}
+                    className={`text-xs font-bold px-2.5 py-1 rounded-lg border transition cursor-pointer ${
+                      !sortByHits
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    Orden de columna (1, 2, 3...)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSortByHits(true)}
+                    className={`text-xs font-bold px-2.5 py-1 rounded-lg border transition cursor-pointer flex items-center gap-1 ${
+                      sortByHits
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <ArrowUpDown className="w-3.5 h-3.5" />
+                    <span>Más aciertos arriba</span>
+                  </button>
+                </div>
               </div>
 
               {/* ------------------------------------------------------------- */}
@@ -2297,23 +2314,46 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
       {/* GRID DE COLUMNAS CON ESCRUTINIO DESTACADO */}
       {/* ========================================================================= */}
       <div className="p-4 sm:p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-bold text-slate-800">
-            Mostrando {displayedColumns.length} de {result.columnsCount} columnas
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-sm font-bold text-slate-800">
+              Mostrando {displayedColumns.length} de {result.columnsCount} columnas
+            </h3>
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
+              {sortByHits && activeDrawInfo
+                ? 'Orden: Más aciertos primero'
+                : `Orden correlativo: Col 01 a Col ${result.columnsCount.toString().padStart(2, '0')}`}
+            </span>
             {hitsFilter !== 'all' && (
-              <span className="ml-2 font-normal text-slate-500">(filtro activo)</span>
+              <span className="text-xs font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200">
+                Filtro activo
+              </span>
             )}
-          </h3>
+          </div>
 
-          {hitsFilter !== 'all' && (
-            <button
-              type="button"
-              onClick={() => setHitsFilter('all')}
-              className="text-xs text-indigo-600 font-bold hover:underline cursor-pointer"
-            >
-              Quitar filtro y ver todas
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {activeDrawInfo && (
+              <button
+                type="button"
+                onClick={() => setSortByHits(!sortByHits)}
+                className="text-xs font-bold text-slate-700 hover:text-indigo-600 flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition cursor-pointer shadow-2xs"
+                title={sortByHits ? 'Volver al orden natural de columnas' : 'Ordenar con más aciertos arriba'}
+              >
+                <ArrowUpDown className="w-3.5 h-3.5 text-indigo-600" />
+                <span>{sortByHits ? 'Ver en orden de columna (1, 2, 3...)' : 'Ver más aciertos arriba'}</span>
+              </button>
+            )}
+
+            {hitsFilter !== 'all' && (
+              <button
+                type="button"
+                onClick={() => setHitsFilter('all')}
+                className="text-xs text-indigo-600 font-bold hover:underline cursor-pointer"
+              >
+                Quitar filtro y ver todas
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
