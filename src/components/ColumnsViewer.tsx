@@ -105,23 +105,15 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
   const [bulkReintegro, setBulkReintegro] = useState<number | undefined>(undefined);
   const [reintegroMode, setReintegroMode] = useState<'by_boleto' | 'all'>('by_boleto');
 
-  // Sync ONLY when a fresh reduction combination is generated (different columns length, game or first column ID)
-  const prevColsSignature = useRef<string>(
-    `${result.game}-${result.guarantee}-${result.columns.length}-${result.columns[0]?.id || 0}`
-  );
-
-  useEffect(() => {
-    const currentSignature = `${result.game}-${result.guarantee}-${result.columns.length}-${result.columns[0]?.id || 0}`;
-    if (prevColsSignature.current !== currentSignature) {
-      prevColsSignature.current = currentSignature;
-      const initial: Record<number, number | undefined> = {};
-      result.columns.forEach((col) => {
-        initial[col.id] = col.reintegro;
-      });
-      setColumnReintegros(initial);
-      setBulkReintegro(undefined);
-    }
+    useEffect(() => {
+    const initial: Record<number, number | undefined> = {};
+    result.columns.forEach((col) => {
+      initial[col.id] = col.reintegro;
+    });
+    setColumnReintegros(initial);
+    setBulkReintegro(undefined);
   }, [result.game, result.guarantee, result.columns]);
+
 
   const handleSetAllReintegros = (reintegro: number) => {
     setBulkReintegro(reintegro);
