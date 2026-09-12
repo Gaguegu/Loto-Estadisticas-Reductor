@@ -29,6 +29,7 @@ import { UpdateNotificationBanner } from './components/UpdateNotificationBanner'
 import { useAppUpdate } from './hooks/useAppUpdate';
 import { getSavedCombinations } from './utils/savedCombinations';
 import { SavedCombination } from './types';
+import { CURRENT_APP_VERSION } from './config/version';
 import { Sparkles, Info, HelpCircle, ArrowDown, CheckCircle2, RefreshCw, X, AlertTriangle, FolderHeart } from 'lucide-react';
 
 export default function App() {
@@ -778,6 +779,40 @@ export default function App() {
           onClose={() => setIsManualModalOpen(false)}
           onPrintManual={handlePrintManual}
         />
+
+        {/* Footer with App Version & Info */}
+        <footer className="mt-12 pt-6 pb-4 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+          <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-start">
+            <span className="font-semibold text-slate-700">ANSAMA LotoEstadísticas &amp; Reductor</span>
+            <span>&bull;</span>
+            <span
+              className="inline-flex items-center gap-1 font-mono font-bold px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-800 shadow-2xs"
+              title={`Versión: v${CURRENT_APP_VERSION.version} compilada el ${CURRENT_APP_VERSION.buildDate}`}
+            >
+              v{CURRENT_APP_VERSION.version}
+            </span>
+            <span className="hidden sm:inline">&bull;</span>
+            <span className="text-slate-400">{CURRENT_APP_VERSION.buildDate}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleCheckForUpdates}
+              disabled={isCheckingAppUpdate}
+              className="hover:text-slate-900 transition underline underline-offset-2 flex items-center gap-1 cursor-pointer disabled:opacity-50"
+              title="Comprobar si hay versiones más recientes en GitHub"
+            >
+              <RefreshCw className={`w-3 h-3 ${isCheckingAppUpdate ? 'animate-spin' : ''}`} />
+              <span>{isCheckingAppUpdate ? 'Comprobando...' : 'Comprobar actualizaciones'}</span>
+            </button>
+            <span>&bull;</span>
+            <button
+              onClick={() => setIsManualModalOpen(true)}
+              className="hover:text-slate-900 transition underline underline-offset-2 cursor-pointer"
+            >
+              Manual de uso
+            </button>
+          </div>
+        </footer>
       </div>
 
       {/* Simple Floating Notification when an update is pending */}

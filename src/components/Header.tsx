@@ -3,6 +3,7 @@ import { GameType } from '../types';
 import { PWAInstallButton } from './PWAInstallButton';
 import { Database, Calendar, RefreshCw, FolderHeart, BookOpen } from 'lucide-react';
 import ansamaLogo from '../assets/images/ansama_lottery_logo_1788692658153.jpg';
+import { CURRENT_APP_VERSION } from '../config/version';
 
 interface HeaderProps {
   activeGame: GameType;
@@ -87,7 +88,7 @@ export const Header: React.FC<HeaderProps> = ({
               />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-1.5 sm:gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                 <span
                   className={`px-1.5 py-0.5 rounded-md border font-black text-[9px] sm:text-[10px] tracking-wider uppercase shadow-xs ${
                     isEuro
@@ -115,6 +116,16 @@ export const Header: React.FC<HeaderProps> = ({
                     &amp; Reductor
                   </span>
                 </h1>
+                <span
+                  className={`px-1.5 py-0.5 rounded-full font-mono text-[9px] sm:text-[10px] font-bold border shadow-xs tracking-tight select-all ${
+                    isEuro
+                      ? 'bg-slate-950/10 text-slate-950 border-slate-950/20'
+                      : 'bg-white/15 text-white border-white/25'
+                  }`}
+                  title={`Versión de la aplicación: v${CURRENT_APP_VERSION.version} (${CURRENT_APP_VERSION.buildDate})`}
+                >
+                  v{CURRENT_APP_VERSION.version}
+                </span>
               </div>
               <p
                 className={`text-[10px] sm:text-xs truncate ${

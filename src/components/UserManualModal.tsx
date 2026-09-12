@@ -16,6 +16,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import ansamaLogo from '../assets/images/ansama_lottery_logo_1788692658153.jpg';
+import { CURRENT_APP_VERSION } from '../config/version';
 
 interface UserManualModalProps {
   isOpen: boolean;
@@ -57,10 +58,13 @@ export const UserManualModal: React.FC<UserManualModalProps> = ({
               referrerPolicy="no-referrer"
             />
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-black text-base sm:text-lg tracking-tight text-white">
                   Manual de Usuario y Guía de Uso
                 </h3>
+                <span className="text-[10px] font-mono bg-white/15 text-white border border-white/20 font-bold px-2 py-0.5 rounded-full">
+                  v{CURRENT_APP_VERSION.version}
+                </span>
                 <span className="text-[10px] bg-amber-400 text-slate-950 font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
                   PDF Descargable
                 </span>
