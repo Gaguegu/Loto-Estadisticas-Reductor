@@ -1,4 +1,4 @@
-import { LotteryDraw, GameType, NumberStat, PeriodFilterState } from '../types';
+import { LotteryDraw, GameType, NumberStat, PeriodFilterState, SelectionCriterion } from '../types';
 
 export const GAME_DRAW_DAYS: Record<GameType, string[]> = {
   primitiva: ['Lunes', 'Jueves', 'Sábado'],
@@ -178,4 +178,77 @@ export function calculateLotteryStats(
   });
 
   return results;
+}
+
+/**
+ * Selects N numbers or stars based on statistical criterion:
+ * - 'frequency': Top by totalCount descending (más frecuentes)
+ * - 'delay_desc': Top by currentDelay descending (mayor atraso)
+ * - 'streak': Top by streak descending, then by currentDelay ascending (en racha / calientes)
+ * - 'balanced': 50% top frequency + 50% top delay (equilibrado / mixto)
+ */
+export function selectByCriterion(
+  stats: NumberStat[],
+  count: number,
+  criterion: SelectionCriterion = 'frequency'
+): number[] {
+  if (!stats || stats.length === 0 || count <= 0) return [];
+  const safeCount = Math.min(count, stats.length);
+
+  if (criterion === 'frequency') {
+    const sorted = [...stats].sort((a, b) => {
+      if (b.totalCount !== a.totalCount) return b.totalCount - a.totalCount;
+      return a.number - b.number;
+    });
+    return sorted.slice(0, safeCount).map((s) => s.number);
+  }
+
+  if (criterion === 'delay_desc') {
+    const sorted = [...stats].sort((a, b) => {
+      if (b.currentDelay !== a.currentDelay) return b.currentDelay - a.currentDelay;
+      if (b.totalCount !== a.totalCount) return b.totalCount - a.totalCount;
+      return a.number - b.number;
+    });
+    return sorted.slice(0, safeCount).map((s) => s.number);
+  }
+
+  if (criterion === 'streak') {
+    const sorted = [...stats].sort((a, b) => {
+      if (b.streak !== a.streak) return b.streak - a.streak;
+      if (a.currentDelay !== b.currentDelay) return a.currentDelay - b.currentDelay;
+      if (b.totalCount !== a.totalCount) return b.totalCount - a.totalCount;
+      return a.number - b.number;
+    });
+    return sorted.slice(0, safeCount).map((s) => s.number);
+  }
+
+  if (criterion === 'balanced') {
+    const half = Math.ceil(safeCount / 2);
+    const freqSorted = [...stats].sort((a, b) => {
+      if (b.totalCount !== a.totalCount) return b.totalCount - a.totalCount;
+      return a.number - b.number;
+    });
+    const delaySorted = [...stats].sort((a, b) => {
+      if (b.currentDelay !== a.currentDelay) return b.currentDelay - a.currentDelay;
+      return a.number - b.number;
+    });
+
+    const chosen = new Set<number>();
+    for (const s of freqSorted) {
+      if (chosen.size >= half) break;
+      chosen.add(s.number);
+    }
+    for (const s of delaySorted) {
+      if (chosen.size >= safeCount) break;
+      chosen.add(s.number);
+    }
+    for (const s of freqSorted) {
+      if (chosen.size >= safeCount) break;
+      chosen.add(s.number);
+    }
+
+    return Array.from(chosen).sort((a, b) => a - b);
+  }
+
+  return stats.slice(0, safeCount).map((s) => s.number);
 }

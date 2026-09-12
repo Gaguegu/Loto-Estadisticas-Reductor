@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { GameType, LotteryDraw, PeriodFilterState, ReductionGuarantee, ReductionResult } from './types';
+import { GameType, LotteryDraw, PeriodFilterState, ReductionGuarantee, ReductionResult, SelectionCriterion } from './types';
 import { getStoredDraws, saveStoredDraws, resetStoredDraws } from './data/historicalDraws';
 import {
   countMissingDraws,
@@ -13,7 +13,7 @@ import {
   setAutoSyncPreference,
   exportDatabaseToJson,
 } from './utils/syncDatabase';
-import { calculateLotteryStats, filterDraws, getPresetDates, DEFAULT_PRICES } from './utils/lotteryStats';
+import { calculateLotteryStats, filterDraws, getPresetDates, DEFAULT_PRICES, selectByCriterion } from './utils/lotteryStats';
 import { generateReducedColumns } from './utils/reductions';
 import { Header } from './components/Header';
 import { PeriodFilter } from './components/PeriodFilter';
@@ -229,14 +229,18 @@ export default function App() {
     return calculateLotteryStats(filteredDraws, activeGame, true);
   }, [filteredDraws, activeGame]);
 
+  // Criterion for statistical selection (frequency, delay_desc, streak, balanced)
+  const [selectionCriterion, setSelectionCriterion] = useState<SelectionCriterion>('frequency');
+
   // Automatically initialize selected numbers with Top N on game change or stats update
   useEffect(() => {
     const targetCount = activeGame === 'euromillones' ? 10 : 12;
-    const topNums = numberStats.slice(0, targetCount).map((s) => s.number);
+    const topNums = selectByCriterion(numberStats, targetCount, selectionCriterion);
     setSelectedNumbers(topNums);
 
+    let topStars: number[] = [];
     if (activeGame === 'euromillones') {
-      const topStars = starStats.slice(0, 5).map((s) => s.number);
+      topStars = selectByCriterion(starStats, 5, selectionCriterion);
       setSelectedStars(topStars);
     } else {
       setSelectedStars([]);
@@ -248,7 +252,7 @@ export default function App() {
       topNums,
       activeGame,
       guarantee,
-      activeGame === 'euromillones' ? starStats.slice(0, 5).map((s) => s.number) : [],
+      activeGame === 'euromillones' ? topStars : [],
       currentPrice
     );
     setReductionResult(initialResult);
@@ -276,14 +280,84 @@ export default function App() {
     }
   };
 
+  const handleChangeCriterion = (newCriterion: SelectionCriterion) => {
+    setSelectionCriterion(newCriterion);
+    const targetNumCount =
+      selectedNumbers.length > 0 ? selectedNumbers.length : activeGame === 'euromillones' ? 10 : 12;
+    const chosenNums = selectByCriterion(numberStats, targetNumCount, newCriterion);
+    setSelectedNumbers(chosenNums);
+
+    if (activeGame === 'euromillones') {
+      const targetStarCount =
+        selectedStars.length >= 2 && selectedStars.length <= 5 ? selectedStars.length : 5;
+      const chosenStars = selectByCriterion(starStats, targetStarCount, newCriterion);
+      setSelectedStars(chosenStars);
+    }
+  };
+
+  const handleSelectQuickCount = (count: number) => {
+    const chosen = selectByCriterion(numberStats, count, selectionCriterion);
+    setSelectedNumbers(chosen);
+  };
+
+  const handleSelectQuickStarsCount = (count: number) => {
+    const chosen = selectByCriterion(starStats, count, selectionCriterion);
+    setSelectedStars(chosen);
+  };
+
   const handleSelectTopN = (count: number) => {
-    const top = numberStats.slice(0, count).map((s) => s.number);
+    setSelectionCriterion('frequency');
+    const top = selectByCriterion(numberStats, count, 'frequency');
     setSelectedNumbers(top);
+    if (activeGame === 'euromillones') {
+      const starCount = selectedStars.length >= 2 && selectedStars.length <= 5 ? selectedStars.length : 5;
+      setSelectedStars(selectByCriterion(starStats, starCount, 'frequency'));
+    }
+  };
+
+  const handleSelectTopDelay = (count: number) => {
+    setSelectionCriterion('delay_desc');
+    const chosen = selectByCriterion(numberStats, count, 'delay_desc');
+    setSelectedNumbers(chosen);
+    if (activeGame === 'euromillones') {
+      const starCount = selectedStars.length >= 2 && selectedStars.length <= 5 ? selectedStars.length : 5;
+      setSelectedStars(selectByCriterion(starStats, starCount, 'delay_desc'));
+    }
+  };
+
+  const handleSelectStreak = (count: number) => {
+    setSelectionCriterion('streak');
+    const chosen = selectByCriterion(numberStats, count, 'streak');
+    setSelectedNumbers(chosen);
+    if (activeGame === 'euromillones') {
+      const starCount = selectedStars.length >= 2 && selectedStars.length <= 5 ? selectedStars.length : 5;
+      setSelectedStars(selectByCriterion(starStats, starCount, 'streak'));
+    }
+  };
+
+  const handleSelectBalanced = (count: number) => {
+    setSelectionCriterion('balanced');
+    const chosen = selectByCriterion(numberStats, count, 'balanced');
+    setSelectedNumbers(chosen);
+    if (activeGame === 'euromillones') {
+      const starCount = selectedStars.length >= 2 && selectedStars.length <= 5 ? selectedStars.length : 5;
+      setSelectedStars(selectByCriterion(starStats, starCount, 'balanced'));
+    }
   };
 
   const handleSelectTopStars = (count: number) => {
-    const top = starStats.slice(0, count).map((s) => s.number);
+    const top = selectByCriterion(starStats, count, selectionCriterion);
     setSelectedStars(top);
+  };
+
+  const handleSelectTopStarsByCriterion = (count: number, criterion: SelectionCriterion) => {
+    setSelectionCriterion(criterion);
+    const chosen = selectByCriterion(starStats, count, criterion);
+    setSelectedStars(chosen);
+  };
+
+  const handleClearStars = () => {
+    setSelectedStars([]);
   };
 
   const handleClearSelection = () => {
@@ -335,7 +409,7 @@ export default function App() {
         ...prev,
         columns: prev.columns.map((col) => ({
           ...col,
-          reintegro: reintegrosMap[col.id] !== undefined ? reintegrosMap[col.id] : col.reintegro,
+          reintegro: col.id in reintegrosMap ? reintegrosMap[col.id] : col.reintegro,
         })),
       };
     });
@@ -530,7 +604,12 @@ export default function App() {
             onToggleStar={handleToggleStar}
             onSelectTopN={handleSelectTopN}
             onSelectTopStars={handleSelectTopStars}
+            onSelectTopDelay={handleSelectTopDelay}
+            onSelectBalanced={handleSelectBalanced}
+            onSelectStreak={handleSelectStreak}
+            onSelectTopStarsByCriterion={handleSelectTopStarsByCriterion}
             onClearSelection={handleClearSelection}
+            onClearStars={handleClearStars}
             selectedDay={periodFilter.selectedDay || 'all'}
             onSelectDay={(day) => setPeriodFilter((prev) => ({ ...prev, selectedDay: day }))}
           />
@@ -545,7 +624,10 @@ export default function App() {
             pricePerBet={gamePrices[activeGame]}
             onChangePricePerBet={handleChangePrice}
             onGenerate={handleGenerateReduction}
-            onSelectQuickCount={handleSelectTopN}
+            onSelectQuickCount={handleSelectQuickCount}
+            onSelectQuickStarsCount={handleSelectQuickStarsCount}
+            selectionCriterion={selectionCriterion}
+            onChangeCriterion={handleChangeCriterion}
           />
 
           {/* 4. Generated Columns & Cost Summary */}

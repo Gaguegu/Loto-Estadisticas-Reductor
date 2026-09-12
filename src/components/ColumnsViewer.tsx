@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { ReductionResult, LotteryDraw } from '../types';
 import { REDUCTION_PLANS } from '../utils/reductions';
 import {
@@ -105,13 +105,25 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
   const [bulkReintegro, setBulkReintegro] = useState<number | undefined>(undefined);
   const [reintegroMode, setReintegroMode] = useState<'by_boleto' | 'all'>('by_boleto');
 
-    useEffect(() => {
+  useEffect(() => {
     const initial: Record<number, number | undefined> = {};
-    result.columns.forEach((col) => {
+    let firstR: number | undefined = undefined;
+    let isUniform = result.columns.length > 0;
+
+    result.columns.forEach((col, idx) => {
       initial[col.id] = col.reintegro;
+      if (idx === 0) {
+        firstR = col.reintegro;
+      } else if (col.reintegro !== firstR) {
+        isUniform = false;
+      }
     });
     setColumnReintegros(initial);
-    setBulkReintegro(undefined);
+    if (isUniform && firstR !== undefined) {
+      setBulkReintegro(firstR);
+    } else {
+      setBulkReintegro(undefined);
+    }
   }, [result.game, result.guarantee, result.columns]);
 
 
@@ -1944,25 +1956,25 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-1.5 self-start sm:self-auto shrink-0 flex-wrap">
+                  <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto self-stretch sm:self-auto shrink-0">
                     <button
                       type="button"
                       id="btn-simulate-boleto-reintegros"
                       onClick={handleSimulateBoletoReintegros}
-                      className="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-white border border-blue-300 text-blue-800 hover:bg-blue-100/80 transition shadow-2xs cursor-pointer flex items-center gap-1.5 active:scale-95"
+                      className="flex-1 sm:flex-initial min-h-[38px] px-3 py-1.5 text-xs font-bold rounded-lg bg-white border border-blue-300 text-blue-800 hover:bg-blue-50 active:bg-blue-100 transition shadow-2xs cursor-pointer flex items-center justify-center gap-1.5 active:scale-95"
                       title="Asigna reintegros aleatorios por cada boleto oficial de 8 apuestas como hace el terminal de Loterías"
                     >
-                      <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                      <Sparkles className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                       <span>🎲 Aleatorio por boletos (8 ap.)</span>
                     </button>
                     <button
                       type="button"
                       id="btn-clear-reintegros-all"
                       onClick={handleClearReintegros}
-                      className="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 hover:text-red-700 hover:border-red-300 transition cursor-pointer flex items-center gap-1 active:scale-95 shadow-2xs"
+                      className="flex-1 sm:flex-initial min-h-[38px] px-3 py-1.5 text-xs font-bold rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-300 active:bg-rose-100 transition cursor-pointer flex items-center justify-center gap-1.5 active:scale-95 shadow-2xs"
                       title="Limpiar todos los reintegros asignados"
                     >
-                      <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+                      <RotateCcw className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                       <span>Limpiar todo</span>
                     </button>
                   </div>
