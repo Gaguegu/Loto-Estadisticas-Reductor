@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   ExternalLink,
   Info,
+  Edit2,
 } from 'lucide-react';
 import { parseAndValidateDraws, OFFICIAL_DRAW_HOURS } from '../utils/syncDatabase';
 import { getMaxCelebratedDateForGame } from '../data/historicalDraws';
@@ -56,6 +57,7 @@ export const DrawsHistoryModal: React.FC<DrawsHistoryModalProps> = ({
 }) => {
   const maxCelebratedDate = getMaxCelebratedDateForGame(game);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingDrawId, setEditingDrawId] = useState<string | null>(null);
   const [newDate, setNewDate] = useState(maxCelebratedDate);
   const [newNumbersStr, setNewNumbersStr] = useState('');
   const [newComplementario, setNewComplementario] = useState('');
@@ -66,6 +68,17 @@ export const DrawsHistoryModal: React.FC<DrawsHistoryModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
+
+  const handleEditDraw = (draw: LotteryDraw) => {
+    setEditingDrawId(draw.id);
+    setNewDate(draw.date);
+    setNewNumbersStr(draw.numbers.join(' '));
+    setNewComplementario(draw.complementario !== undefined ? String(draw.complementario) : '');
+    setNewReintegro(draw.reintegro !== undefined ? String(draw.reintegro) : '');
+    setNewStarsStr(draw.stars ? draw.stars.join(' ') : '');
+    setShowAddForm(true);
+    setErrorMessage('');
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -136,7 +149,7 @@ export const DrawsHistoryModal: React.FC<DrawsHistoryModalProps> = ({
     const dayOfWeek = dayNames[dateObj.getDay()];
 
     const newDraw: LotteryDraw = {
-      id: `${game}-${newDate}-${Date.now()}`,
+      id: editingDrawId || `${game}-${newDate}-${Date.now()}`,
       game,
       date: newDate,
       dayOfWeek,
@@ -148,6 +161,7 @@ export const DrawsHistoryModal: React.FC<DrawsHistoryModalProps> = ({
 
     onAddDraw(newDraw);
     setShowAddForm(false);
+    setEditingDrawId(null);
     setNewNumbersStr('');
     setNewStarsStr('');
     setNewComplementario('');
@@ -331,8 +345,18 @@ export const DrawsHistoryModal: React.FC<DrawsHistoryModalProps> = ({
         <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs">
           <button
             onClick={() => {
-              setShowAddForm(!showAddForm);
-              setNewDate(maxCelebratedDate);
+              if (showAddForm) {
+                setShowAddForm(false);
+                setEditingDrawId(null);
+              } else {
+                setEditingDrawId(null);
+                setNewDate(maxCelebratedDate);
+                setNewNumbersStr('');
+                setNewStarsStr('');
+                setNewComplementario('');
+                setNewReintegro('');
+                setShowAddForm(true);
+              }
             }}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition"
           >
@@ -354,7 +378,8 @@ export const DrawsHistoryModal: React.FC<DrawsHistoryModalProps> = ({
         {showAddForm && (
           <form onSubmit={handleCreateDraw} className="p-4 bg-blue-50/50 border-b border-blue-100 text-xs space-y-3">
             <h3 className="font-bold text-slate-900 text-sm flex items-center gap-1">
-              <Calendar className="w-4 h-4 text-blue-600" /> Registrar Sorteo Oficial
+              <Calendar className="w-4 h-4 text-blue-600" />
+              {editingDrawId ? 'Editar Sorteo Oficial' : 'Registrar Sorteo Oficial'}
             </h3>
 
             {errorMessage && (
@@ -436,7 +461,10 @@ export const DrawsHistoryModal: React.FC<DrawsHistoryModalProps> = ({
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
-                onClick={() => setShowAddForm(false)}
+                onClick={() => {
+                  setShowAddForm(false);
+                  setEditingDrawId(null);
+                }}
                 className="px-3 py-1.5 rounded-lg bg-slate-200 text-slate-700 font-medium"
               >
                 Cancelar
@@ -445,7 +473,7 @@ export const DrawsHistoryModal: React.FC<DrawsHistoryModalProps> = ({
                 type="submit"
                 className="px-4 py-1.5 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-700"
               >
-                Guardar Sorteo
+                {editingDrawId ? 'Actualizar Sorteo' : 'Guardar Sorteo'}
               </button>
             </div>
           </form>
@@ -495,6 +523,14 @@ export const DrawsHistoryModal: React.FC<DrawsHistoryModalProps> = ({
                     ★{s}
                   </span>
                 ))}
+                <button
+                  type="button"
+                  onClick={() => handleEditDraw(d)}
+                  className="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition ml-1 shrink-0"
+                  title="Editar combinación de este sorteo"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
           ))}

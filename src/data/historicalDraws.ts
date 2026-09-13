@@ -57,6 +57,8 @@ export const INITIAL_DRAWS: LotteryDraw[] = [
   // ==========================================
   // --- BONOLOTO (Diario: Lunes a Domingo) ---
   // ==========================================
+  { id: 'bn-2026-09-12', game: 'bonoloto', date: '2026-09-12', dayOfWeek: 'Sábado', numbers: [3, 4, 12, 23, 37, 48], complementario: 7, reintegro: 8 },
+  { id: 'bn-2026-09-11', game: 'bonoloto', date: '2026-09-11', dayOfWeek: 'Viernes', numbers: [27, 28, 31, 32, 38, 49], complementario: 42, reintegro: 5 },
   { id: 'bn-2026-09-10', game: 'bonoloto', date: '2026-09-10', dayOfWeek: 'Jueves', numbers: [3, 6, 14, 33, 36, 47], complementario: 32, reintegro: 8 },
   { id: 'bn-2026-09-09', game: 'bonoloto', date: '2026-09-09', dayOfWeek: 'Miércoles', numbers: [12, 16, 23, 25, 29, 40], complementario: 47, reintegro: 9 },
   { id: 'bn-2026-09-08', game: 'bonoloto', date: '2026-09-08', dayOfWeek: 'Martes', numbers: [32, 33, 35, 37, 38, 39], complementario: 18, reintegro: 7 },
@@ -135,6 +137,7 @@ export const INITIAL_DRAWS: LotteryDraw[] = [
   // ==============================================
   // --- LA PRIMITIVA (Lunes, Jueves, Sábado) ---
   // ==============================================
+  { id: 'pr-2026-09-12', game: 'primitiva', date: '2026-09-12', dayOfWeek: 'Sábado', numbers: [3, 4, 22, 26, 40, 44], complementario: 47, reintegro: 8 },
   { id: 'pr-2026-09-10', game: 'primitiva', date: '2026-09-10', dayOfWeek: 'Jueves', numbers: [17, 26, 35, 44, 45, 48], complementario: 3, reintegro: 5 },
   { id: 'pr-2026-09-07', game: 'primitiva', date: '2026-09-07', dayOfWeek: 'Lunes', numbers: [18, 27, 28, 33, 46, 48], complementario: 23, reintegro: 4 },
   { id: 'pr-2026-09-05', game: 'primitiva', date: '2026-09-05', dayOfWeek: 'Sábado', numbers: [3, 12, 19, 31, 45, 47], complementario: 1, reintegro: 3 },
@@ -184,6 +187,7 @@ export const INITIAL_DRAWS: LotteryDraw[] = [
   // ========================================================
   // --- EUROMILLONES (Martes y Viernes - 5N + 2 Estrellas) ---
   // ========================================================
+  { id: 'em-2026-09-11', game: 'euromillones', date: '2026-09-11', dayOfWeek: 'Viernes', numbers: [1, 7, 15, 39, 50], stars: [1, 11] },
   { id: 'em-2026-09-08', game: 'euromillones', date: '2026-09-08', dayOfWeek: 'Martes', numbers: [13, 17, 33, 35, 39], stars: [7, 12] },
   { id: 'em-2026-09-04', game: 'euromillones', date: '2026-09-04', dayOfWeek: 'Viernes', numbers: [11, 12, 19, 27, 46], stars: [4, 12] },
   { id: 'em-2026-09-01', game: 'euromillones', date: '2026-09-01', dayOfWeek: 'Martes', numbers: [2, 10, 23, 37, 47], stars: [3, 5] },

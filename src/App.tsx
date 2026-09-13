@@ -5,7 +5,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { GameType, LotteryDraw, PeriodFilterState, ReductionGuarantee, ReductionResult, SelectionCriterion } from './types';
-import { getStoredDraws, saveStoredDraws, resetStoredDraws } from './data/historicalDraws';
+import { getStoredDraws, saveStoredDraws, resetStoredDraws, sanitizeDraws } from './data/historicalDraws';
 import {
   countMissingDraws,
   synchronizeDatabase,
@@ -126,7 +126,7 @@ export default function App() {
           setSyncToast({
             show: true,
             title: 'Base de datos verificada y corregida',
-            message: `Se han actualizado ${result.correctedVerifiedCount} sorteo(s) con los resultados oficiales definitivos (incluyendo Bonoloto 08-09-2026: 32, 33, 35, 37, 38, 39 | C: 18 | R: 7).`,
+            message: `Se han actualizado ${result.correctedVerifiedCount} sorteo(s) con los resultados oficiales definitivos (incluyendo Euromillones 11-09: 1, 7, 15, 39, 50 ★ 1, 11; Bonoloto 11-09 y 12-09; y Primitiva 12-09).`,
             type: 'success',
           });
         } else if (result.addedCount > 0) {
@@ -427,7 +427,12 @@ export default function App() {
   };
 
   const handleAddDraw = (newDraw: LotteryDraw) => {
-    setAllDraws((prev) => [newDraw, ...prev]);
+    setAllDraws((prev) => {
+      const filtered = prev.filter((d) => !(d.game === newDraw.game && d.date === newDraw.date));
+      const updated = sanitizeDraws([newDraw, ...filtered]);
+      saveStoredDraws(updated);
+      return updated;
+    });
   };
 
   const handleResetDraws = () => {

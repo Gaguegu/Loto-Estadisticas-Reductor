@@ -1,7 +1,7 @@
 {
-  "version": "2.7.1",
-  "buildTime": 1773410000000,
-  "buildDate": "2026-09-12T14:30:00.000Z",
+  "version": "2.7.2",
+  "buildTime": 1773480000000,
+  "buildDate": "2026-09-13T10:30:00.000Z",
   "appName": "LotoEstadísticas & Reductor",
-  "notes": "Selector rápido de estrellas a reducir y filtros estadísticos aplicados a números y estrellas en Euromillones."
+  "notes": "Actualización con resultados oficiales definitivos del 11 y 12 de septiembre (Euromillones, Bonoloto y Primitiva) y función de edición directa de sorteos."
 }
