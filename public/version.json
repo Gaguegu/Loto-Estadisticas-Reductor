@@ -1,7 +1,7 @@
 {
-  "version": "2.8.0",
-  "buildTime": 1773485000000,
-  "buildDate": "2026-09-13T10:45:00.000Z",
+  "version": "2.8.1",
+  "buildTime": 1773486000000,
+  "buildDate": "2026-09-13T10:55:00.000Z",
   "appName": "LotoEstadísticas & Reductor",
-  "notes": "Incorporado nuevo módulo independiente de Lector QR y Comprobador de Boletos oficiales con escaneo por cámara en directo, subida de foto y cálculo automático de premios."
+  "notes": "Optimización del Lector QR de boletos con selector de cámaras, enlace directo con callback ref y resolución de carga de visor de cámara."
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import jsQR from 'jsqr';
 import { GameType, LotteryDraw } from '../types';
 import {
@@ -29,6 +29,8 @@ import {
   Sliders,
   ShieldCheck,
   Edit3,
+  Video,
+  SwitchCamera,
 } from 'lucide-react';
 
 interface TicketQRScannerModalProps {
@@ -48,7 +50,11 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
 }) => {
   const [selectedGame, setSelectedGame] = useState<GameType>(initialGame);
   const [isCameraActive, setIsCameraActive] = useState(false);
+  const [isStartingCamera, setIsStartingCamera] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraNotice, setCameraNotice] = useState<string | null>(null);
+  const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const [scannedRawText, setScannedRawText] = useState<string>('');
   const [parsedTicket, setParsedTicket] = useState<ParsedTicketData | null>(null);
   const [manualInputText, setManualInputText] = useState<string>('');
@@ -64,14 +70,42 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
   const animationFrameId = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
+  // Query and list video devices
+  const enumerateCameras = async () => {
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoInputs = devices.filter((d) => d.kind === 'videoinput');
+        setVideoDevices(videoInputs);
+        if (videoInputs.length > 0 && !selectedDeviceId) {
+          // Prefer physical webcam over virtual cameras (like Windows Virtual Camera)
+          const nonVirtual = videoInputs.find(
+            (d) =>
+              !d.label.toLowerCase().includes('virtual') &&
+              !d.label.toLowerCase().includes('obs')
+          );
+          if (nonVirtual && nonVirtual.deviceId) {
+            setSelectedDeviceId(nonVirtual.deviceId);
+          } else {
+            setSelectedDeviceId(videoInputs[0].deviceId);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Error enumerating video devices:', err);
+    }
+  };
+
   // Keep game selection synchronized when modal opens
   useEffect(() => {
     if (isOpen) {
       setSelectedGame(initialGame);
       setCameraError(null);
+      setCameraNotice(null);
       setScannedRawText('');
       setParsedTicket(null);
       setScrutinyResult(null);
+      enumerateCameras();
     } else {
       stopCamera();
     }
@@ -111,36 +145,137 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
   }, [parsedTicket, selectedDrawId, customReintegro, availableDraws]);
 
   // Start webcam video stream
-  const startCamera = async () => {
+  const startCamera = async (targetDeviceId?: string) => {
     setCameraError(null);
+    setCameraNotice(null);
+    setIsStartingCamera(true);
+
+    // Stop previous stream if any
+    if (animationFrameId.current) {
+      cancelAnimationFrame(animationFrameId.current);
+      animationFrameId.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('Tu navegador no permite el acceso a la cámara o estás en un entorno restringido.');
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' } },
-        audio: false,
-      });
+      const deviceIdToUse = targetDeviceId !== undefined ? targetDeviceId : selectedDeviceId;
+
+      let constraints: MediaStreamConstraints;
+      if (deviceIdToUse) {
+        constraints = {
+          video: {
+            deviceId: { exact: deviceIdToUse },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        };
+      } else {
+        constraints = {
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        };
+      }
+
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (firstErr: any) {
+        console.warn('Constraint getUserMedia failed, retrying with fallback:', firstErr);
+        // Fallback to basic video request if constrained request fails
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      }
 
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.setAttribute('playsinline', 'true');
-        await videoRef.current.play();
-        setIsCameraActive(true);
-        scanFrame();
-      }
+      setIsCameraActive(true);
+      setIsStartingCamera(false);
+
+      // Now query device list with labels (labels become populated after permission is granted!)
+      await enumerateCameras();
     } catch (err: any) {
       console.error('Camera access error:', err);
+      setIsStartingCamera(false);
       setIsCameraActive(false);
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        setCameraError('Permiso denegado para acceder a la cámara. Concede permisos en tu navegador o sube una foto del código QR.');
+        setCameraError(
+          'Permiso denegado en el navegador. Haz clic en el icono de cámara o candado junto a la barra de direcciones de Chrome y pulsa «Permitir».'
+        );
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        setCameraError(
+          'La cámara seleccionada no responde o está ocupada por otra app (típico de cámaras virtuales de móviles cuando no están activas). Por favor selecciona tu cámara web física en el desplegable.'
+        );
       } else {
-        setCameraError(`No se pudo iniciar la cámara (${err.message || 'error desconocido'}). Puedes subir una imagen o introducir el código.`);
+        setCameraError(
+          `No se pudo iniciar la cámara (${err.message || 'error desconocido'}). Prueba a seleccionar otra cámara o sube una imagen del boleto.`
+        );
       }
     }
   };
+
+  // Callback ref to attach stream immediately as soon as video element is mounted in DOM
+  const handleVideoRef = useCallback((videoNode: HTMLVideoElement | null) => {
+    videoRef.current = videoNode;
+    if (videoNode && streamRef.current) {
+      videoNode.srcObject = streamRef.current;
+      videoNode.setAttribute('playsinline', 'true');
+      videoNode.muted = true;
+      videoNode.play().then(() => {
+        scanFrame();
+      }).catch((playErr) => {
+        console.warn('Autoplay error on mount:', playErr);
+      });
+    }
+  }, []);
+
+  // Attach stream to video element whenever camera becomes active
+  useEffect(() => {
+    if (isCameraActive && streamRef.current && videoRef.current) {
+      const video = videoRef.current;
+      video.srcObject = streamRef.current;
+      video.setAttribute('playsinline', 'true');
+
+      const playVideo = async () => {
+        try {
+          await video.play();
+          scanFrame();
+        } catch (playErr) {
+          console.warn('Autoplay error:', playErr);
+        }
+      };
+
+      video.onloadedmetadata = () => {
+        playVideo();
+      };
+
+      if (video.readyState >= 1) {
+        playVideo();
+      }
+
+      // Check after 3.5s if video is receiving valid frames (detect inactive virtual cameras)
+      const timeoutId = setTimeout(() => {
+        if (video.videoWidth === 0 || video.readyState < 2) {
+          setCameraNotice(
+            'Aviso: La cámara seleccionada no está transmitiendo imagen. Si tienes seleccionada "Windows Virtual Camera" o un móvil vinculado, abre la app de enlace en tu móvil o selecciona tu cámara web física en el selector superior.'
+          );
+        }
+      }, 3500);
+
+      return () => {
+        clearTimeout(timeoutId);
+      };
+    }
+  }, [isCameraActive]);
 
   // Stop webcam video stream
   const stopCamera = () => {
@@ -156,6 +291,8 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
       videoRef.current.srcObject = null;
     }
     setIsCameraActive(false);
+    setIsStartingCamera(false);
+    setCameraNotice(null);
   };
 
   // Continuous frame analysis loop using jsQR
@@ -166,7 +303,7 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-    if (video.readyState === video.HAVE_ENOUGH_DATA && ctx) {
+    if (video.readyState >= video.HAVE_CURRENT_DATA && ctx && video.videoWidth > 0 && video.videoHeight > 0) {
       canvas.height = video.videoHeight;
       canvas.width = video.videoWidth;
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -183,7 +320,9 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
       }
     }
 
-    animationFrameId.current = requestAnimationFrame(scanFrame);
+    if (streamRef.current && streamRef.current.active) {
+      animationFrameId.current = requestAnimationFrame(scanFrame);
+    }
   };
 
   // Handle scanned/uploaded QR content
@@ -387,11 +526,21 @@ Apuesta 2: 12 18 24 33 45 + 04 09`;
               <div className="flex items-center gap-2 flex-wrap">
                 {!isCameraActive ? (
                   <button
-                    onClick={startCamera}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+                    onClick={() => startCamera()}
+                    disabled={isStartingCamera}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-60"
                   >
-                    <Camera className="w-3.5 h-3.5" />
-                    <span>Activar Cámara</span>
+                    {isStartingCamera ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Conectando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Camera className="w-3.5 h-3.5" />
+                        <span>Activar Cámara</span>
+                      </>
+                    )}
                   </button>
                 ) : (
                   <button
@@ -431,13 +580,68 @@ Apuesta 2: 12 18 24 33 45 + 04 09`;
                   <span>Ejemplo Demo</span>
                 </button>
               </div>
+
+              {/* Camera device selection dropdown (if devices enumerated) */}
+              {videoDevices.length > 0 && (
+                <div className="w-full flex items-center gap-2 pt-2 border-t border-slate-100 flex-wrap">
+                  <span className="text-xs font-semibold text-slate-600 flex items-center gap-1">
+                    <Video className="w-3.5 h-3.5 text-indigo-600" /> Dispositivo de cámara:
+                  </span>
+                  <select
+                    value={selectedDeviceId}
+                    onChange={(e) => {
+                      const devId = e.target.value;
+                      setSelectedDeviceId(devId);
+                      if (isCameraActive) {
+                        startCamera(devId);
+                      }
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-white border border-slate-300 font-medium text-slate-800 text-xs shadow-2xs focus:ring-2 focus:ring-indigo-500 focus:outline-none max-w-sm truncate"
+                  >
+                    {videoDevices.map((dev, idx) => (
+                      <option key={dev.deviceId || idx} value={dev.deviceId}>
+                        {dev.label || `Cámara ${idx + 1}`}
+                      </option>
+                    ))}
+                  </select>
+                  {isCameraActive && (
+                    <button
+                      onClick={() => startCamera(selectedDeviceId)}
+                      className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold underline cursor-pointer"
+                    >
+                      Cambiar a esta cámara
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
+
+            {/* Browser Permission Guidance Banner */}
+            {isStartingCamera && (
+              <div className="p-3.5 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-950 flex items-start gap-2.5 mb-3 shadow-2xs animate-pulse">
+                <RefreshCw className="w-4 h-4 text-indigo-600 animate-spin shrink-0 mt-0.5" />
+                <div className="flex-1 space-y-1">
+                  <p className="font-bold text-indigo-900">
+                    Esperando confirmación de permiso en Chrome
+                  </p>
+                  <p className="text-slate-700 leading-relaxed">
+                    👉 Haz clic en <strong>«Permitir mientras se visita el sitio»</strong> (o «Permitir esta vez») en la ventana emergente de Chrome arriba a la izquierda.
+                  </p>
+                  <p className="text-slate-600 text-[11px]">
+                    Si en esa ventana de Chrome el desplegable tiene seleccionada una cámara virtual (como <em>Windows Virtual Camera</em>) y la vista previa se queda cargando, cambia el desplegable a tu <strong>Cámara web integrada</strong> o webcam USB.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Camera Viewport */}
             {isCameraActive && (
               <div className="relative rounded-2xl overflow-hidden bg-black border-2 border-indigo-500/50 shadow-inner flex flex-col items-center justify-center min-h-[260px] max-h-[380px] mb-4">
                 <video
-                  ref={videoRef}
+                  ref={handleVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
                   className="w-full h-full object-cover max-h-[360px]"
                 />
                 <canvas ref={canvasRef} className="hidden" />
@@ -456,6 +660,22 @@ Apuesta 2: 12 18 24 33 45 + 04 09`;
                 <div className="absolute bottom-3 bg-black/70 backdrop-blur-xs text-white text-xs px-3 py-1 rounded-full font-medium flex items-center gap-1.5">
                   <RefreshCw className="w-3 h-3 animate-spin text-emerald-400" />
                   <span>Enfoca el código QR dentro del recuadro...</span>
+                </div>
+              </div>
+            )}
+
+            {/* Camera Warning / Stream Notice */}
+            {cameraNotice && (
+              <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-900 flex items-start gap-2.5 mb-3">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="flex-1 space-y-1">
+                  <p className="font-bold">Aviso de señal de la cámara</p>
+                  <p>{cameraNotice}</p>
+                  {videoDevices.length > 1 && (
+                    <p className="font-semibold text-indigo-700">
+                      💡 Consejo: Cambia la cámara en el desplegable superior a tu cámara web integrada o conecta tu móvil.
+                    </p>
+                  )}
                 </div>
               </div>
             )}
