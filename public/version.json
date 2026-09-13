@@ -1,7 +1,7 @@
 {
-  "version": "2.7.2",
-  "buildTime": 1773480000000,
-  "buildDate": "2026-09-13T10:30:00.000Z",
+  "version": "2.8.0",
+  "buildTime": 1773485000000,
+  "buildDate": "2026-09-13T10:45:00.000Z",
   "appName": "LotoEstadísticas & Reductor",
-  "notes": "Actualización con resultados oficiales definitivos del 11 y 12 de septiembre (Euromillones, Bonoloto y Primitiva) y función de edición directa de sorteos."
+  "notes": "Incorporado nuevo módulo independiente de Lector QR y Comprobador de Boletos oficiales con escaneo por cámara en directo, subida de foto y cálculo automático de premios."
 }

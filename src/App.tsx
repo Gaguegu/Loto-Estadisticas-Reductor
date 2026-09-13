@@ -23,6 +23,7 @@ import { ColumnsViewer } from './components/ColumnsViewer';
 import { PrintSlip } from './components/PrintSlip';
 import { DrawsHistoryModal } from './components/DrawsHistoryModal';
 import { SavedCombinationsModal } from './components/SavedCombinationsModal';
+import { TicketQRScannerModal } from './components/TicketQRScannerModal';
 import { UserManualModal } from './components/UserManualModal';
 import { PrintManual } from './components/PrintManual';
 import { UpdateNotificationBanner } from './components/UpdateNotificationBanner';
@@ -39,6 +40,7 @@ export default function App() {
   const [isSavedCombinationsModalOpen, setIsSavedCombinationsModalOpen] = useState(false);
   const [savedCombinationsCount, setSavedCombinationsCount] = useState(() => getSavedCombinations().length);
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
+  const [isQRScannerModalOpen, setIsQRScannerModalOpen] = useState(false);
   const [printMode, setPrintMode] = useState<'slip' | 'manual'>('slip');
 
   // Application auto-update and GitHub synchronization hook
@@ -503,6 +505,7 @@ export default function App() {
           }}
           savedCombinationsCount={savedCombinationsCount}
           onOpenManual={() => setIsManualModalOpen(true)}
+          onOpenQRScanner={() => setIsQRScannerModalOpen(true)}
           hasAppUpdate={hasAppUpdate}
           isCheckingAppUpdate={isCheckingAppUpdate}
           onApplyUpdate={applyUpdate}
@@ -783,6 +786,15 @@ export default function App() {
           isOpen={isManualModalOpen}
           onClose={() => setIsManualModalOpen(false)}
           onPrintManual={handlePrintManual}
+        />
+
+        {/* QR Ticket Scanner & Prize Scrutiny Modal */}
+        <TicketQRScannerModal
+          isOpen={isQRScannerModalOpen}
+          onClose={() => setIsQRScannerModalOpen(false)}
+          allDraws={allDraws}
+          initialGame={activeGame}
+          onSyncDatabase={handleSyncDatabase}
         />
 
         {/* Footer with App Version & Info */}

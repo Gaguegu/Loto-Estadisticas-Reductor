@@ -1,7 +1,7 @@
 import React from 'react';
 import { GameType } from '../types';
 import { PWAInstallButton } from './PWAInstallButton';
-import { Database, Calendar, RefreshCw, FolderHeart, BookOpen } from 'lucide-react';
+import { Database, Calendar, RefreshCw, FolderHeart, BookOpen, QrCode } from 'lucide-react';
 import ansamaLogo from '../assets/images/ansama_lottery_logo_1788692658153.jpg';
 import { CURRENT_APP_VERSION } from '../config/version';
 
@@ -16,6 +16,7 @@ interface HeaderProps {
   onOpenSavedCombinations?: () => void;
   savedCombinationsCount?: number;
   onOpenManual?: () => void;
+  onOpenQRScanner?: () => void;
   hasAppUpdate?: boolean;
   isCheckingAppUpdate?: boolean;
   onApplyUpdate?: () => void;
@@ -33,6 +34,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSavedCombinations,
   savedCombinationsCount = 0,
   onOpenManual,
+  onOpenQRScanner,
   hasAppUpdate = false,
   isCheckingAppUpdate = false,
   onApplyUpdate,
@@ -232,6 +234,22 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
+            {onOpenQRScanner && (
+              <button
+                id="header-qr-scanner-btn"
+                onClick={onOpenQRScanner}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition active:scale-95 shadow-xs cursor-pointer ${
+                  isEuro
+                    ? 'bg-slate-950/15 hover:bg-slate-950/25 border-slate-950/30 text-slate-950 ring-1 ring-amber-400/40'
+                    : 'bg-white/20 hover:bg-white/30 border-white/35 text-white ring-1 ring-white/30'
+                }`}
+                title="Lector de QR para escanear boletos oficiales y comprobar premios"
+              >
+                <QrCode className="w-3.5 h-3.5 text-amber-300" />
+                <span>Lector QR Boletos</span>
+              </button>
+            )}
+
             {onOpenManual && (
               <button
                 id="header-user-manual-btn"
@@ -398,7 +416,24 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </button>
 
-          {/* 4. Guía / Manual PDF */}
+          {/* 4. Lector QR Boletos */}
+          {onOpenQRScanner && (
+            <button
+              id="mobile-qr-scanner-btn"
+              onClick={onOpenQRScanner}
+              className={`inline-flex items-center justify-center gap-1 px-2 py-2 rounded-xl text-[11px] font-bold border transition active:scale-95 shadow-xs cursor-pointer ${
+                isEuro
+                  ? 'bg-slate-950/15 hover:bg-slate-950/25 border-slate-950/30 text-slate-950 ring-1 ring-amber-400/40'
+                  : 'bg-white/20 hover:bg-white/30 border-white/35 text-white ring-1 ring-white/30'
+              }`}
+              title="Lector QR de boletos oficiales"
+            >
+              <QrCode className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+              <span className="truncate">Lector QR</span>
+            </button>
+          )}
+
+          {/* 5. Guía / Manual PDF */}
           <button
             id="mobile-user-manual-btn"
             onClick={onOpenManual}
