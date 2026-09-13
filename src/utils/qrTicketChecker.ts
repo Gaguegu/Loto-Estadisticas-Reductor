@@ -7,6 +7,8 @@ export interface ScannedBet {
   reintegro?: number;
 }
 
+export type TicketScope = 'single' | 'weekly';
+
 export interface ParsedTicketData {
   raw: string;
   game: GameType;
@@ -18,6 +20,7 @@ export interface ParsedTicketData {
   ticketCode?: string;
   isOfficialSELAECode: boolean;
   notes?: string;
+  ticketScope?: TicketScope; // 'single' (1 sorteo diario) or 'weekly' (multisorteo semanal)
 }
 
 export interface BetScrutinyResult {
@@ -225,6 +228,12 @@ export function parseTicketQR(qrText: string, defaultGame: GameType = 'primitiva
     }
   }
 
+  // Check if ticket specifies weekly participation
+  let ticketScope: TicketScope = 'single';
+  if (/semanal|semana|abono|multisorteo|3\s*sorteos|2\s*sorteos|sem\.|3\s*d[ií]as|2\s*d[ií]as/i.test(trimmed)) {
+    ticketScope = 'weekly';
+  }
+
   return {
     raw: trimmed,
     game: detectedGame,
@@ -234,9 +243,191 @@ export function parseTicketQR(qrText: string, defaultGame: GameType = 'primitiva
     bets,
     ticketCode,
     isOfficialSELAECode,
+    ticketScope,
     notes: isOfficialSELAECode
       ? 'Código oficial de resguardo detectado. Por motivos de seguridad de SELAE, los códigos oficiales están cifrados con el número de serie de la terminal.'
       : undefined,
+  };
+}
+
+export interface WeeklyDrawScrutiny {
+  draw: LotteryDraw;
+  dayOfWeek: string;
+  date: string;
+  dayLabel: string;
+  dayFullTitle: string;
+  scrutiny: TicketScrutinyResult;
+  totalWon: number;
+  winningBetsCount: number;
+  bestPrizeCategory: string;
+  hasReintegro: boolean;
+  statusBadge: {
+    text: string;
+    isWon: boolean;
+  };
+}
+
+export interface MultiDrawTicketScrutiny {
+  game: GameType;
+  ticket: ParsedTicketData;
+  scope: TicketScope;
+  weekStart: string;
+  weekEnd: string;
+  weekLabel: string;
+  totalWon: number;
+  totalWinningBets: number;
+  drawsCount: number;
+  winningDrawsCount: number;
+  draws: WeeklyDrawScrutiny[];
+}
+
+/**
+ * Returns the Monday (YYYY-MM-DD) of the ISO week containing the given date.
+ */
+export function getMondayOfWeek(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  const day = date.getUTCDay(); // 0 = Sunday, 1 = Monday ... 6 = Saturday
+  const diff = date.getUTCDate() - day + (day === 0 ? -6 : 1);
+  const monday = new Date(Date.UTC(y, m - 1, diff, 12, 0, 0));
+  return monday.toISOString().slice(0, 10);
+}
+
+/**
+ * Returns the Sunday (YYYY-MM-DD) of the ISO week containing the given date.
+ */
+export function getSundayOfWeek(dateStr: string): string {
+  const mondayStr = getMondayOfWeek(dateStr);
+  const [y, m, d] = mondayStr.split('-').map(Number);
+  const sunday = new Date(Date.UTC(y, m - 1, d + 6, 12, 0, 0));
+  return sunday.toISOString().slice(0, 10);
+}
+
+/**
+ * Formats a Spanish week label, e.g. "Semana del 7 al 13 de Septiembre de 2026"
+ */
+export function getWeekSpanishLabel(dateStr: string): string {
+  const mondayStr = getMondayOfWeek(dateStr);
+  const sundayStr = getSundayOfWeek(dateStr);
+
+  const months = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+  ];
+
+  const mParts = mondayStr.split('-').map(Number);
+  const sParts = sundayStr.split('-').map(Number);
+
+  const mDay = mParts[2];
+  const sDay = sParts[2];
+  const mMonth = months[mParts[1] - 1];
+  const sMonth = months[sParts[1] - 1];
+  const year = sParts[0];
+
+  if (mMonth === sMonth) {
+    return `Semana del ${mDay} al ${sDay} de ${sMonth} de ${year}`;
+  }
+  return `Semana del ${mDay} de ${mMonth} al ${sDay} de ${sMonth} de ${year}`;
+}
+
+/**
+ * Filters all draws that occurred within the ISO week of referenceDate for the specified game.
+ * Sorted chronologically (Monday -> Sunday).
+ */
+export function getDrawsForWeek(
+  allDraws: LotteryDraw[],
+  referenceDate: string,
+  game: GameType
+): LotteryDraw[] {
+  const mondayStr = getMondayOfWeek(referenceDate);
+  const sundayStr = getSundayOfWeek(referenceDate);
+
+  return allDraws
+    .filter((d) => d.game === game && d.date >= mondayStr && d.date <= sundayStr)
+    .sort((a, b) => a.date.localeCompare(b.date)); // Chronological order
+}
+
+/**
+ * Scrutinizes a ticket across one or multiple draws (Weekly / Multi-draw).
+ * In Primitiva: Lunes, Jueves, Sábado.
+ * In Bonoloto: Toda la semana (Lunes a Domingo).
+ * In Euromillones: Martes y Viernes.
+ */
+export function scrutinizeMultiDrawTicket(
+  ticket: ParsedTicketData,
+  draws: LotteryDraw[],
+  customReintegro?: number,
+  scope: TicketScope = 'weekly'
+): MultiDrawTicketScrutiny {
+  const referenceDate = draws.length > 0 ? draws[0].date : new Date().toISOString().slice(0, 10);
+  const mondayStr = getMondayOfWeek(referenceDate);
+  const sundayStr = getSundayOfWeek(referenceDate);
+  const weekLabel = getWeekSpanishLabel(referenceDate);
+
+  let totalWon = 0;
+  let totalWinningBets = 0;
+  let winningDrawsCount = 0;
+
+  const scrutinizedDraws: WeeklyDrawScrutiny[] = draws.map((draw) => {
+    const scrutiny = scrutinizeTicket(ticket, draw, customReintegro);
+    totalWon += scrutiny.totalWon;
+    totalWinningBets += scrutiny.winningBetsCount;
+    if (scrutiny.totalWon > 0 || scrutiny.winningBetsCount > 0) {
+      winningDrawsCount++;
+    }
+
+    const winningBets = scrutiny.bets.filter((b) => b.isPrize);
+    let bestPrizeCategory = 'Sin premio';
+    if (winningBets.length > 0) {
+      const sorted = [...winningBets].sort((a, b) => b.estimatedPrize - a.estimatedPrize);
+      bestPrizeCategory = sorted[0].prizeCategory;
+    }
+
+    const dayName = draw.dayOfWeek || 'Sorteo';
+    const parts = draw.date.split('-');
+    const formattedShort = `${parts[2]}/${parts[1]}`;
+    const formattedFull = `${parts[2]}/${parts[1]}/${parts[0]}`;
+
+    let badgeText = 'Sin premio (0,00 €)';
+    let isWon = false;
+    if (scrutiny.totalWon > 0) {
+      isWon = true;
+      badgeText = `${scrutiny.winningBetsCount} premio(s): +${scrutiny.totalWon.toLocaleString('es-ES', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })} €`;
+    }
+
+    return {
+      draw,
+      dayOfWeek: dayName,
+      date: draw.date,
+      dayLabel: `${dayName} ${formattedShort}`,
+      dayFullTitle: `${dayName}, ${formattedFull}`,
+      scrutiny,
+      totalWon: scrutiny.totalWon,
+      winningBetsCount: scrutiny.winningBetsCount,
+      bestPrizeCategory,
+      hasReintegro: scrutiny.reintegroWon,
+      statusBadge: {
+        text: badgeText,
+        isWon,
+      },
+    };
+  });
+
+  return {
+    game: ticket.game,
+    ticket,
+    scope,
+    weekStart: mondayStr,
+    weekEnd: sundayStr,
+    weekLabel,
+    totalWon,
+    totalWinningBets,
+    drawsCount: draws.length,
+    winningDrawsCount,
+    draws: scrutinizedDraws,
   };
 }
 

@@ -4,8 +4,14 @@ import { GameType, LotteryDraw } from '../types';
 import {
   parseTicketQR,
   scrutinizeTicket,
+  scrutinizeMultiDrawTicket,
+  getDrawsForWeek,
+  getWeekSpanishLabel,
   ParsedTicketData,
   TicketScrutinyResult,
+  MultiDrawTicketScrutiny,
+  WeeklyDrawScrutiny,
+  TicketScope,
   OFFICIAL_PRIZE_ESTIMATES,
 } from '../utils/qrTicketChecker';
 import {
@@ -31,6 +37,9 @@ import {
   Edit3,
   Video,
   SwitchCamera,
+  Coins,
+  Check,
+  ListFilter,
 } from 'lucide-react';
 
 interface TicketQRScannerModalProps {
@@ -60,10 +69,15 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
   const [manualInputText, setManualInputText] = useState<string>('');
   const [isManualInputMode, setIsManualInputMode] = useState<boolean>(false);
 
+  // Participation scope (single draw vs weekly / multi-draw)
+  const [ticketScope, setTicketScope] = useState<TicketScope>('weekly');
+  const [activeTabDayId, setActiveTabDayId] = useState<string>('all');
+
   // Selected draw for verification
   const [selectedDrawId, setSelectedDrawId] = useState<string>('');
   const [customReintegro, setCustomReintegro] = useState<number | undefined>(undefined);
   const [scrutinyResult, setScrutinyResult] = useState<TicketScrutinyResult | null>(null);
+  const [multiDrawResult, setMultiDrawResult] = useState<MultiDrawTicketScrutiny | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -106,6 +120,8 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
       setScannedRawText('');
       setParsedTicket(null);
       setScrutinyResult(null);
+      setMultiDrawResult(null);
+      setActiveTabDayId('all');
       enumerateCameras();
     } else {
       stopCamera();
@@ -128,22 +144,37 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
     }
   }, [availableDraws, selectedDrawId]);
 
-  // Update scrutiny result whenever ticket, selected draw, or custom reintegro changes
+  // Update scrutiny results whenever ticket, selected draw, custom reintegro, or scope changes
   useEffect(() => {
     if (!parsedTicket || parsedTicket.bets.length === 0) {
       setScrutinyResult(null);
+      setMultiDrawResult(null);
       return;
     }
 
     const draw = availableDraws.find((d) => d.id === selectedDrawId) || availableDraws[0];
     if (!draw) {
       setScrutinyResult(null);
+      setMultiDrawResult(null);
       return;
     }
 
+    // 1. Single draw verification against the selected draw
     const res = scrutinizeTicket(parsedTicket, draw, customReintegro);
     setScrutinyResult(res);
-  }, [parsedTicket, selectedDrawId, customReintegro, availableDraws]);
+
+    // 2. Multi-draw / Weekly verification
+    // Find all official draws belonging to this draw's calendar week (Monday to Sunday)
+    const weekDraws = getDrawsForWeek(allDraws, draw.date, selectedGame);
+    const targetDraws = ticketScope === 'weekly' ? (weekDraws.length > 0 ? weekDraws : [draw]) : [draw];
+    const multiRes = scrutinizeMultiDrawTicket(
+      parsedTicket,
+      targetDraws,
+      customReintegro,
+      ticketScope
+    );
+    setMultiDrawResult(multiRes);
+  }, [parsedTicket, selectedDrawId, customReintegro, availableDraws, ticketScope, allDraws, selectedGame]);
 
   // Start webcam video stream
   const startCamera = async (targetDeviceId?: string) => {
@@ -337,6 +368,10 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
     if (parsed.reintegro !== undefined) {
       setCustomReintegro(parsed.reintegro);
     }
+    if (parsed.ticketScope) {
+      setTicketScope(parsed.ticketScope);
+    }
+    setActiveTabDayId('all');
   };
 
   // Process image upload from file (phone gallery / photo)
@@ -386,6 +421,8 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
     setParsedTicket(null);
     setScannedRawText('');
     setScrutinyResult(null);
+    setMultiDrawResult(null);
+    setActiveTabDayId('all');
     setManualInputText('');
     setCameraError(null);
     setCameraNotice(null);
@@ -405,6 +442,8 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
     setParsedTicket(null);
     setScannedRawText('');
     setScrutinyResult(null);
+    setMultiDrawResult(null);
+    setActiveTabDayId('all');
     setManualInputText('');
     setCameraError(null);
     setCameraNotice(null);
@@ -419,18 +458,21 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
     let demoText = '';
     if (selectedGame === 'primitiva') {
       demoText = `LA PRIMITIVA - SELAE
+MODALIDAD: SEMANAL (3 SORTEOS: LUNES, JUEVES Y SÁBADO)
 Apuesta 1: 03 04 22 26 40 44
-Apuesta 2: 10 15 28 33 42 47
+Apuesta 2: 18 27 28 33 46 48
 Reintegro: 8`;
     } else if (selectedGame === 'bonoloto') {
       demoText = `BONOLOTO - SELAE
+MODALIDAD: SEMANAL (LUNES A DOMINGO)
 Apuesta 1: 03 04 12 23 37 48
 Apuesta 2: 07 18 25 31 40 49
 Reintegro: 8`;
     } else {
       demoText = `EUROMILLONES - SELAE
+MODALIDAD: SEMANAL (MARTES Y VIERNES)
 Apuesta 1: 01 07 15 39 50 + 01 11
-Apuesta 2: 12 18 24 33 45 + 04 09`;
+Apuesta 2: 13 17 33 35 39 + 07 12`;
     }
     handleCodeDetected(demoText);
   };
@@ -804,7 +846,7 @@ Apuesta 2: 12 18 24 33 45 + 04 09`;
             <div className="space-y-4">
               {/* Ticket Overview Card */}
               <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-xs">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <span
@@ -826,19 +868,36 @@ Apuesta 2: 12 18 24 33 45 + 04 09`;
                         Boleto detectado ({parsedTicket.bets.length}{' '}
                         {parsedTicket.bets.length === 1 ? 'apuesta' : 'apuestas'})
                       </h3>
+                      {parsedTicket.ticketScope === 'weekly' && (
+                        <span className="text-[10px] bg-indigo-100 text-indigo-900 font-bold px-2 py-0.5 rounded-full border border-indigo-200">
+                          Detectado como Semanal
+                        </span>
+                      )}
                     </div>
-                    {currentDraw && (
-                      <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
-                        <span>Escrutado contra el sorteo oficial:</span>
-                        <strong className="text-slate-800">
-                          {currentDraw.dayOfWeek}, {currentDraw.date}
+
+                    {ticketScope === 'weekly' && multiDrawResult ? (
+                      <p className="text-xs text-slate-600 mt-1 flex items-center gap-1.5 flex-wrap">
+                        <span className="font-semibold text-indigo-900">
+                          Escrutado en los {multiDrawResult.drawsCount} sorteos de la semana:
+                        </span>
+                        <strong className="text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">
+                          {multiDrawResult.weekLabel}
                         </strong>
                       </p>
+                    ) : (
+                      currentDraw && (
+                        <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                          <span>Escrutado contra sorteo individual:</span>
+                          <strong className="text-slate-800">
+                            {currentDraw.dayOfWeek}, {currentDraw.date}
+                          </strong>
+                        </p>
+                      )
                     )}
                   </div>
 
-                  {/* Actions & Reintegro */}
-                  <div className="flex items-center gap-2 flex-wrap self-start sm:self-center">
+                  {/* Actions, Scope selector & Reintegro */}
+                  <div className="flex items-center gap-2 flex-wrap self-start md:self-center">
                     <button
                       id="scan-another-ticket-header-btn"
                       onClick={handleScanAnotherTicket}
@@ -851,8 +910,8 @@ Apuesta 2: 12 18 24 33 45 + 04 09`;
 
                     {/* Reintegro Quick Selector for Primitiva/Bonoloto */}
                     {selectedGame !== 'euromillones' && (
-                      <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-xl border border-slate-200 text-xs">
-                        <span className="font-semibold text-slate-700">Reintegro (R):</span>
+                      <div className="flex items-center gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-200 text-xs">
+                        <span className="font-semibold text-slate-700">Reintegro:</span>
                         <select
                           value={customReintegro !== undefined ? customReintegro : ''}
                           onChange={(e) =>
@@ -865,7 +924,7 @@ Apuesta 2: 12 18 24 33 45 + 04 09`;
                           <option value="">Sin definir</option>
                           {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((r) => (
                             <option key={r} value={r}>
-                              R: {r} {currentDraw?.reintegro === r ? '★ (Premio)' : ''}
+                              R: {r}
                             </option>
                           ))}
                         </select>
@@ -874,193 +933,720 @@ Apuesta 2: 12 18 24 33 45 + 04 09`;
                   </div>
                 </div>
 
-                {/* Draw Official Winning Numbers Bar */}
-                {currentDraw && (
-                  <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex flex-wrap items-center justify-between gap-3 text-xs">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="font-bold text-slate-700 mr-1">Combinación Ganadora:</span>
-                      {currentDraw.numbers.map((n) => (
-                        <span
-                          key={n}
-                          className="w-6 h-6 rounded-full bg-slate-800 text-white font-black text-xs flex items-center justify-center shadow-2xs"
+                {/* Modalidad de Participación Selector Bar */}
+                <div className="mt-3.5 p-2 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                      <Layers className="w-3.5 h-3.5 text-indigo-600" /> Modalidad del Boleto:
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 bg-slate-200/70 p-1 rounded-xl">
+                    <button
+                      type="button"
+                      id="scope-single-btn"
+                      onClick={() => setTicketScope('single')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                        ticketScope === 'single'
+                          ? 'bg-white text-indigo-800 shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      1 Sorteo (Diario)
+                    </button>
+                    <button
+                      type="button"
+                      id="scope-weekly-btn"
+                      onClick={() => setTicketScope('weekly')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                        ticketScope === 'weekly'
+                          ? 'bg-indigo-600 text-white shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      <span>
+                        {selectedGame === 'primitiva'
+                          ? 'Semanal (3 Sorteos: Lunes, Jueves y Sábado)'
+                          : selectedGame === 'bonoloto'
+                          ? 'Semana Completa (Lunes a Domingo)'
+                          : 'Semanal (2 Sorteos: Martes y Viernes)'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* ========================================================================= */}
+                {/* WEEKLY MULTI-DRAW VIEW: When ticketScope === 'weekly' */}
+                {/* ========================================================================= */}
+                {ticketScope === 'weekly' && multiDrawResult && (
+                  <div className="space-y-4 mt-4">
+                    {/* Overall Weekly Financial Result Banner */}
+                    <div
+                      className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                        multiDrawResult.totalWon > 0
+                          ? 'bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-emerald-300 text-emerald-950 shadow-xs'
+                          : 'bg-slate-50 border-slate-200 text-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
+                            multiDrawResult.totalWon > 0
+                              ? 'bg-emerald-500 text-white shadow-md'
+                              : 'bg-slate-200 text-slate-500'
+                          }`}
                         >
-                          {n}
-                        </span>
-                      ))}
+                          {multiDrawResult.totalWon > 0 ? (
+                            <Trophy className="w-6 h-6" />
+                          ) : (
+                            <Award className="w-6 h-6" />
+                          )}
+                        </div>
+                        <div>
+                          <h4 className="font-black text-base sm:text-lg">
+                            {multiDrawResult.totalWon > 0
+                              ? '¡Boleto Semanal Premiado!'
+                              : 'Boleto sin premio en la semana escrutada'}
+                          </h4>
+                          <p className="text-xs">
+                            {multiDrawResult.winningDrawsCount > 0 ? (
+                              <span>
+                                <strong>{multiDrawResult.winningDrawsCount}</strong> de{' '}
+                                <strong>{multiDrawResult.drawsCount}</strong> sorteos con premio ·{' '}
+                                <strong>{multiDrawResult.totalWinningBets}</strong> apuesta(s) premiada(s)
+                              </span>
+                            ) : (
+                              <span>
+                                Escrutado en los {multiDrawResult.drawsCount} sorteos oficiales ({multiDrawResult.weekLabel})
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
 
-                      {currentDraw.complementario !== undefined && (
-                        <span className="ml-1 px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-900 border border-indigo-200 font-bold">
-                          C: {currentDraw.complementario}
+                      <div className="text-right self-end sm:self-center">
+                        <span className="text-[11px] font-semibold text-slate-500 block">
+                          Total acumulado en la semana:
                         </span>
-                      )}
-
-                      {currentDraw.reintegro !== undefined && (
-                        <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-bold">
-                          R: {currentDraw.reintegro}
+                        <span className="text-2xl sm:text-3xl font-black text-emerald-700 font-mono">
+                          {multiDrawResult.totalWon.toLocaleString('es-ES', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}{' '}
+                          €
                         </span>
-                      )}
+                      </div>
+                    </div>
 
-                      {currentDraw.stars && currentDraw.stars.length > 0 && (
-                        <div className="flex items-center gap-1 ml-1 pl-1 border-l border-slate-300">
-                          {currentDraw.stars.map((s) => (
-                            <span
-                              key={s}
-                              className="w-6 h-6 rounded-full bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center shadow-2xs border border-amber-300"
+                    {/* DEDICATED PANEL: Comunicación de cada sorteo escrutado (Lunes, Jueves o Sábado para Primitiva) */}
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-2.5">
+                        <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                          <Calendar className="w-4 h-4 text-indigo-600" />
+                          <span>
+                            {selectedGame === 'primitiva'
+                              ? 'Sorteos de la semana escrutados (Lunes, Jueves y Sábado):'
+                              : selectedGame === 'bonoloto'
+                              ? 'Sorteos de la semana escrutados (Lunes a Domingo):'
+                              : 'Sorteos de la semana escrutados (Martes y Viernes):'}
+                          </span>
+                        </h4>
+                        <span className="text-[11px] text-slate-500 font-medium">
+                          {multiDrawResult.draws.length} sorteos evaluados
+                        </span>
+                      </div>
+
+                      <div
+                        className={`grid grid-cols-1 ${
+                          multiDrawResult.draws.length === 2
+                            ? 'sm:grid-cols-2'
+                            : multiDrawResult.draws.length === 3
+                            ? 'sm:grid-cols-3'
+                            : 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+                        } gap-3`}
+                      >
+                        {multiDrawResult.draws.map((ds) => {
+                          const isWon = ds.totalWon > 0 || ds.reintegroWon;
+                          const isSelectedDay = activeTabDayId === ds.draw.id;
+
+                          return (
+                            <div
+                              key={ds.draw.id}
+                              className={`p-3.5 rounded-xl border transition flex flex-col justify-between ${
+                                isWon
+                                  ? 'bg-emerald-50/70 border-emerald-300 ring-1 ring-emerald-200/60 shadow-xs'
+                                  : 'bg-slate-50/80 border-slate-200'
+                              }`}
                             >
-                              ★{s}
-                            </span>
+                              <div>
+                                {/* Draw Header & Day status */}
+                                <div className="flex items-center justify-between gap-2 mb-2">
+                                  <div>
+                                    <span className="font-black text-slate-900 text-xs uppercase tracking-wide block">
+                                      {ds.dayOfWeek}
+                                    </span>
+                                    <span className="text-[11px] text-slate-500 font-medium">
+                                      {ds.date}
+                                    </span>
+                                  </div>
+                                  <span
+                                    className={`px-2 py-0.5 rounded-full text-xs font-black border shadow-2xs ${
+                                      isWon
+                                        ? 'bg-emerald-600 text-white border-emerald-500'
+                                        : 'bg-slate-200 text-slate-600 border-slate-300'
+                                    }`}
+                                  >
+                                    {isWon
+                                      ? `+${ds.totalWon.toLocaleString('es-ES', {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                        })} €`
+                                      : '0,00 €'}
+                                  </span>
+                                </div>
+
+                                {/* Official Winning Combination for this day */}
+                                <div className="p-2 bg-white rounded-lg border border-slate-200/80 mb-2.5">
+                                  <span className="text-[10px] font-semibold text-slate-500 block mb-1">
+                                    Combinación Ganadora:
+                                  </span>
+                                  <div className="flex items-center gap-1 flex-wrap">
+                                    {ds.draw.numbers.map((n) => (
+                                      <span
+                                        key={n}
+                                        className="w-5 h-5 rounded-full bg-slate-800 text-white font-bold text-[10px] flex items-center justify-center"
+                                      >
+                                        {n}
+                                      </span>
+                                    ))}
+                                    {ds.draw.complementario !== undefined && (
+                                      <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-900 font-bold text-[10px] border border-indigo-200">
+                                        C:{ds.draw.complementario}
+                                      </span>
+                                    )}
+                                    {ds.draw.reintegro !== undefined && (
+                                      <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 font-bold text-[10px] border border-amber-300">
+                                        R:{ds.draw.reintegro}
+                                      </span>
+                                    )}
+                                    {ds.draw.stars &&
+                                      ds.draw.stars.map((s) => (
+                                        <span
+                                          key={s}
+                                          className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 font-bold text-[10px] flex items-center justify-center border border-amber-300"
+                                        >
+                                          ★{s}
+                                        </span>
+                                      ))}
+                                  </div>
+                                </div>
+
+                                {/* Hits and prizes communication on this day */}
+                                <div className="space-y-1.5 text-xs">
+                                  {ds.winningBets.length > 0 ? (
+                                    ds.winningBets.map((wb) => (
+                                      <div
+                                        key={wb.betIndex}
+                                        className="flex items-center justify-between text-emerald-950 bg-emerald-100/80 px-2 py-1 rounded-md border border-emerald-200 text-[11px]"
+                                      >
+                                        <span className="font-semibold">
+                                          Apuesta {wb.betIndex}: {wb.hits} aciertos ({wb.category})
+                                        </span>
+                                        <strong className="font-mono text-emerald-800">
+                                          +{wb.prize.toLocaleString('es-ES', {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2,
+                                          })}{' '}
+                                          €
+                                        </strong>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <p className="text-[11px] text-slate-500 italic py-0.5">
+                                      Sin aciertos premiados en este día
+                                    </p>
+                                  )}
+
+                                  {ds.reintegroWon && (
+                                    <div className="flex items-center justify-between text-amber-950 bg-amber-100/80 px-2 py-0.5 rounded-md border border-amber-200 text-[11px]">
+                                      <span>Reintegro acertado (R: {ds.draw.reintegro})</span>
+                                      <strong className="font-mono text-amber-900">+1,00 €</strong>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Inspect this day's bets button */}
+                              <button
+                                type="button"
+                                onClick={() => setActiveTabDayId(isSelectedDay ? 'all' : ds.draw.id)}
+                                className={`mt-3 w-full py-1.5 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+                                  isSelectedDay
+                                    ? 'bg-indigo-600 text-white shadow-2xs'
+                                    : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
+                                }`}
+                              >
+                                <span>
+                                  {isSelectedDay
+                                    ? 'Viendo apuestas de este sorteo'
+                                    : `Ver apuestas del ${ds.dayOfWeek}`}
+                                </span>
+                                <ChevronRight
+                                  className={`w-3.5 h-3.5 transition-transform ${
+                                    isSelectedDay ? 'rotate-90' : ''
+                                  }`}
+                                />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* BETS BREAKDOWN WITH DAY FILTER TABS */}
+                    <div className="mt-4 pt-3 border-t border-slate-100 space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                          <ListFilter className="w-3.5 h-3.5 text-indigo-600" />
+                          <span>Desglose de apuestas escaneadas:</span>
+                        </h4>
+
+                        {/* Tabs for days */}
+                        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => setActiveTabDayId('all')}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                              activeTabDayId === 'all'
+                                ? 'bg-white text-indigo-800 shadow-2xs border border-slate-200'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            Resumen Semanal Completo
+                          </button>
+                          {multiDrawResult.draws.map((ds) => (
+                            <button
+                              key={ds.draw.id}
+                              type="button"
+                              onClick={() => setActiveTabDayId(ds.draw.id)}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                                activeTabDayId === ds.draw.id
+                                  ? 'bg-indigo-600 text-white shadow-2xs'
+                                  : 'text-slate-600 hover:text-slate-900'
+                              }`}
+                            >
+                              {ds.dayOfWeek}
+                            </button>
                           ))}
                         </div>
+                      </div>
+
+                      {/* If "all" tab is selected: show bet overview across all days */}
+                      {activeTabDayId === 'all' ? (
+                        <div className="space-y-2">
+                          {multiDrawResult.betsSummary.map((bet) => (
+                            <div
+                              key={bet.betIndex}
+                              className={`p-3.5 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-3 ${
+                                bet.totalPrize > 0
+                                  ? 'bg-emerald-50/60 border-emerald-200'
+                                  : 'bg-white border-slate-200'
+                              }`}
+                            >
+                              <div>
+                                <div className="flex items-center gap-2 mb-1.5">
+                                  <span className="w-6 h-6 rounded-lg bg-slate-100 text-slate-700 font-mono font-bold text-xs flex items-center justify-center border border-slate-200">
+                                    {bet.betIndex}
+                                  </span>
+                                  <div className="flex items-center gap-1 flex-wrap">
+                                    {bet.numbers.map((n) => (
+                                      <span
+                                        key={n}
+                                        className="w-6 h-6 rounded-full bg-slate-800 text-white font-bold text-xs flex items-center justify-center shadow-2xs"
+                                      >
+                                        {n}
+                                      </span>
+                                    ))}
+                                    {bet.stars &&
+                                      bet.stars.map((s) => (
+                                        <span
+                                          key={s}
+                                          className="w-6 h-6 rounded-full bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center shadow-2xs border border-amber-300"
+                                        >
+                                          ★{s}
+                                        </span>
+                                      ))}
+                                  </div>
+                                </div>
+
+                                {/* Performance row across each day */}
+                                <div className="flex items-center gap-2 flex-wrap text-xs mt-2">
+                                  {bet.drawPerformances.map((perf) => (
+                                    <span
+                                      key={perf.drawId}
+                                      className={`px-2 py-0.5 rounded-md border text-[11px] font-semibold flex items-center gap-1 ${
+                                        perf.estimatedPrize > 0
+                                          ? 'bg-emerald-100 text-emerald-900 border-emerald-300 font-bold'
+                                          : 'bg-slate-50 text-slate-600 border-slate-200'
+                                      }`}
+                                    >
+                                      <strong className="uppercase">{perf.dayOfWeek}:</strong>{' '}
+                                      {perf.hitsCount} aciertos
+                                      {perf.starsHitsCount ? ` + ${perf.starsHitsCount}★` : ''}
+                                      {perf.estimatedPrize > 0 && (
+                                        <span className="text-emerald-700 font-mono">
+                                          (+{perf.estimatedPrize.toFixed(2)} €)
+                                        </span>
+                                      )}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+
+                              <div className="text-right shrink-0">
+                                <span className="text-[10px] text-slate-500 uppercase font-bold block">
+                                  Total Apuesta:
+                                </span>
+                                <span className="font-mono font-black text-sm text-emerald-800">
+                                  {bet.totalPrize.toLocaleString('es-ES', {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}{' '}
+                                  €
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        /* Specific Day Bet Inspection: visual hit highlighting */
+                        (() => {
+                          const targetDrawScrutiny = multiDrawResult.draws.find(
+                            (d) => d.draw.id === activeTabDayId
+                          );
+                          if (!targetDrawScrutiny) return null;
+
+                          const winningSet = new Set(targetDrawScrutiny.draw.numbers || []);
+                          const winningStarsSet = new Set(targetDrawScrutiny.draw.stars || []);
+
+                          return (
+                            <div className="space-y-2">
+                              <div className="p-2.5 bg-indigo-50 rounded-lg border border-indigo-100 text-xs text-indigo-950 flex items-center justify-between gap-2">
+                                <span>
+                                  Mostrando aciertos iluminados en el sorteo de{' '}
+                                  <strong>
+                                    {targetDrawScrutiny.dayOfWeek} ({targetDrawScrutiny.date})
+                                  </strong>
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveTabDayId('all')}
+                                  className="text-indigo-600 hover:text-indigo-800 font-bold underline cursor-pointer"
+                                >
+                                  Volver a resumen semanal
+                                </button>
+                              </div>
+
+                              {targetDrawScrutiny.scrutiny.bets.map((bet) => (
+                                <div
+                                  key={bet.index}
+                                  className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition ${
+                                    bet.isPrize
+                                      ? 'bg-emerald-50/70 border-emerald-200'
+                                      : 'bg-white border-slate-200'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2.5 flex-wrap">
+                                    <span className="w-6 h-6 rounded-lg bg-slate-100 text-slate-700 font-mono font-bold text-xs flex items-center justify-center border border-slate-200">
+                                      {bet.index}
+                                    </span>
+
+                                    {/* Numbers */}
+                                    <div className="flex items-center gap-1 flex-wrap">
+                                      {bet.numbers.map((n) => {
+                                        const isHit = winningSet.has(n);
+                                        const isComp =
+                                          targetDrawScrutiny.draw.complementario === n;
+                                        return (
+                                          <span
+                                            key={n}
+                                            className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs transition shadow-2xs ${
+                                              isHit
+                                                ? 'bg-emerald-600 text-white font-black ring-2 ring-emerald-400'
+                                                : isComp
+                                                ? 'bg-indigo-600 text-white font-bold ring-2 ring-indigo-300'
+                                                : 'bg-slate-100 text-slate-800 border border-slate-300'
+                                            }`}
+                                            title={
+                                              isHit
+                                                ? 'Número acertado'
+                                                : isComp
+                                                ? 'Complementario'
+                                                : ''
+                                            }
+                                          >
+                                            {n}
+                                          </span>
+                                        );
+                                      })}
+
+                                      {/* Stars */}
+                                      {bet.stars && bet.stars.length > 0 && (
+                                        <div className="flex items-center gap-1 ml-1 pl-1 border-l border-slate-300">
+                                          {bet.stars.map((s) => {
+                                            const isStarHit = winningStarsSet.has(s);
+                                            return (
+                                              <span
+                                                key={s}
+                                                className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-xs transition shadow-2xs ${
+                                                  isStarHit
+                                                    ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-300'
+                                                    : 'bg-amber-50 text-amber-900 border border-amber-300'
+                                                }`}
+                                                title={isStarHit ? 'Estrella acertada' : ''}
+                                              >
+                                                ★{s}
+                                              </span>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-3 self-end sm:self-center shrink-0 text-xs">
+                                    <span
+                                      className={`px-2.5 py-1 rounded-full font-bold border ${
+                                        bet.isPrize
+                                          ? 'bg-emerald-600 text-white border-emerald-500 shadow-2xs'
+                                          : 'bg-slate-100 text-slate-600 border-slate-200'
+                                      }`}
+                                    >
+                                      {bet.prizeCategory}
+                                    </span>
+
+                                    <span className="font-mono font-bold text-sm min-w-[70px] text-right text-slate-900">
+                                      {bet.estimatedPrize > 0
+                                        ? `${bet.estimatedPrize.toLocaleString('es-ES', {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2,
+                                          })} €`
+                                        : '0,00 €'}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()
                       )}
                     </div>
                   </div>
                 )}
 
-                {/* Scrutiny Financial Banner */}
-                {scrutinyResult && (
-                  <div
-                    className={`mt-4 p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                      scrutinyResult.winningBetsCount > 0 || scrutinyResult.reintegroWon
-                        ? 'bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-emerald-300 text-emerald-950'
-                        : 'bg-slate-50 border-slate-200 text-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
-                          scrutinyResult.winningBetsCount > 0 || scrutinyResult.reintegroWon
-                            ? 'bg-emerald-500 text-white shadow-md'
-                            : 'bg-slate-200 text-slate-500'
-                        }`}
-                      >
-                        {scrutinyResult.winningBetsCount > 0 || scrutinyResult.reintegroWon ? (
-                          <Trophy className="w-6 h-6" />
-                        ) : (
-                          <Award className="w-6 h-6" />
+                {/* ========================================================================= */}
+                {/* SINGLE DRAW VIEW: When ticketScope === 'single' */}
+                {/* ========================================================================= */}
+                {ticketScope === 'single' && currentDraw && (
+                  <div className="space-y-4 mt-4">
+                    {/* Draw Official Winning Numbers Bar */}
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex flex-wrap items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-slate-700 mr-1">
+                          Combinación Ganadora ({currentDraw.dayOfWeek} {currentDraw.date}):
+                        </span>
+                        {currentDraw.numbers.map((n) => (
+                          <span
+                            key={n}
+                            className="w-6 h-6 rounded-full bg-slate-800 text-white font-black text-xs flex items-center justify-center shadow-2xs"
+                          >
+                            {n}
+                          </span>
+                        ))}
+
+                        {currentDraw.complementario !== undefined && (
+                          <span className="ml-1 px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-900 border border-indigo-200 font-bold">
+                            C: {currentDraw.complementario}
+                          </span>
+                        )}
+
+                        {currentDraw.reintegro !== undefined && (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-bold">
+                            R: {currentDraw.reintegro}
+                          </span>
+                        )}
+
+                        {currentDraw.stars && currentDraw.stars.length > 0 && (
+                          <div className="flex items-center gap-1 ml-1 pl-1 border-l border-slate-300">
+                            {currentDraw.stars.map((s) => (
+                              <span
+                                key={s}
+                                className="w-6 h-6 rounded-full bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center shadow-2xs border border-amber-300"
+                              >
+                                ★{s}
+                              </span>
+                            ))}
+                          </div>
                         )}
                       </div>
-                      <div>
-                        <h4 className="font-black text-base sm:text-lg">
-                          {scrutinyResult.winningBetsCount > 0 || scrutinyResult.reintegroWon
-                            ? '¡Boleto Premiado!'
-                            : 'Boleto sin premio en este sorteo'}
-                        </h4>
-                        <p className="text-xs">
-                          {scrutinyResult.winningBetsCount} apuesta(s) con aciertos premiados
-                          {scrutinyResult.reintegroWon ? ' + Reintegro acertado (reembolso)' : ''}
-                        </p>
-                      </div>
                     </div>
 
-                    <div className="text-right self-end sm:self-center">
-                      <span className="text-[11px] font-semibold text-slate-500 block">
-                        Importe estimado obtenido:
-                      </span>
-                      <span className="text-2xl font-black text-emerald-700 font-mono">
-                        {scrutinyResult.totalWon.toLocaleString('es-ES', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}{' '}
-                        €
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Bets Breakdown List */}
-                <div className="mt-4 space-y-2">
-                  <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500 mb-2">
-                    Desglose de apuestas escaneadas:
-                  </h4>
-                  {scrutinyResult?.bets.map((bet) => {
-                    const winningSet = new Set(currentDraw?.numbers || []);
-                    const winningStarsSet = new Set(currentDraw?.stars || []);
-
-                    return (
+                    {/* Scrutiny Financial Banner */}
+                    {scrutinyResult && (
                       <div
-                        key={bet.index}
-                        className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition ${
-                          bet.isPrize
-                            ? 'bg-emerald-50/70 border-emerald-200'
-                            : 'bg-white border-slate-200'
+                        className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                          scrutinyResult.winningBetsCount > 0 || scrutinyResult.reintegroWon
+                            ? 'bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-emerald-300 text-emerald-950 shadow-xs'
+                            : 'bg-slate-50 border-slate-200 text-slate-700'
                         }`}
                       >
-                        <div className="flex items-center gap-2.5 flex-wrap">
-                          <span className="w-6 h-6 rounded-lg bg-slate-100 text-slate-700 font-mono font-bold text-xs flex items-center justify-center border border-slate-200">
-                            {bet.index}
-                          </span>
-
-                          {/* Numbers */}
-                          <div className="flex items-center gap-1 flex-wrap">
-                            {bet.numbers.map((n) => {
-                              const isHit = winningSet.has(n);
-                              const isComp = currentDraw?.complementario === n;
-                              return (
-                                <span
-                                  key={n}
-                                  className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs transition shadow-2xs ${
-                                    isHit
-                                      ? 'bg-emerald-600 text-white font-black ring-2 ring-emerald-400'
-                                      : isComp
-                                      ? 'bg-indigo-600 text-white font-bold ring-2 ring-indigo-300'
-                                      : 'bg-slate-100 text-slate-800 border border-slate-300'
-                                  }`}
-                                  title={isHit ? 'Número acertado' : isComp ? 'Complementario' : ''}
-                                >
-                                  {n}
-                                </span>
-                              );
-                            })}
-
-                            {/* Stars if Euromillones */}
-                            {bet.stars && bet.stars.length > 0 && (
-                              <div className="flex items-center gap-1 ml-1 pl-1 border-l border-slate-300">
-                                {bet.stars.map((s) => {
-                                  const isStarHit = winningStarsSet.has(s);
-                                  return (
-                                    <span
-                                      key={s}
-                                      className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-xs transition shadow-2xs ${
-                                        isStarHit
-                                          ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-300'
-                                          : 'bg-amber-50 text-amber-900 border border-amber-300'
-                                      }`}
-                                      title={isStarHit ? 'Estrella acertada' : ''}
-                                    >
-                                      ★{s}
-                                    </span>
-                                  );
-                                })}
-                              </div>
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
+                              scrutinyResult.winningBetsCount > 0 || scrutinyResult.reintegroWon
+                                ? 'bg-emerald-500 text-white shadow-md'
+                                : 'bg-slate-200 text-slate-500'
+                            }`}
+                          >
+                            {scrutinyResult.winningBetsCount > 0 || scrutinyResult.reintegroWon ? (
+                              <Trophy className="w-6 h-6" />
+                            ) : (
+                              <Award className="w-6 h-6" />
                             )}
+                          </div>
+                          <div>
+                            <h4 className="font-black text-base sm:text-lg">
+                              {scrutinyResult.winningBetsCount > 0 || scrutinyResult.reintegroWon
+                                ? '¡Boleto Premiado!'
+                                : 'Boleto sin premio en este sorteo'}
+                            </h4>
+                            <p className="text-xs">
+                              {scrutinyResult.winningBetsCount} apuesta(s) con aciertos premiados
+                              {scrutinyResult.reintegroWon
+                                ? ' + Reintegro acertado (reembolso)'
+                                : ''}
+                            </p>
                           </div>
                         </div>
 
-                        {/* Bet Scrutiny Category and Estimated Prize */}
-                        <div className="flex items-center gap-3 self-end sm:self-center shrink-0 text-xs">
-                          <span
-                            className={`px-2.5 py-1 rounded-full font-bold border ${
-                              bet.isPrize
-                                ? 'bg-emerald-600 text-white border-emerald-500 shadow-2xs'
-                                : 'bg-slate-100 text-slate-600 border-slate-200'
-                            }`}
-                          >
-                            {bet.prizeCategory}
+                        <div className="text-right self-end sm:self-center">
+                          <span className="text-[11px] font-semibold text-slate-500 block">
+                            Importe estimado obtenido:
                           </span>
-
-                          <span className="font-mono font-bold text-sm min-w-[70px] text-right text-slate-900">
-                            {bet.estimatedPrize > 0
-                              ? `${bet.estimatedPrize.toLocaleString('es-ES', {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2,
-                                })} €`
-                              : '0,00 €'}
+                          <span className="text-2xl font-black text-emerald-700 font-mono">
+                            {scrutinyResult.totalWon.toLocaleString('es-ES', {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}{' '}
+                            €
                           </span>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
+                    )}
+
+                    {/* Bets Breakdown List */}
+                    <div className="space-y-2">
+                      <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500 mb-2">
+                        Desglose de apuestas escaneadas:
+                      </h4>
+                      {scrutinyResult?.bets.map((bet) => {
+                        const winningSet = new Set(currentDraw?.numbers || []);
+                        const winningStarsSet = new Set(currentDraw?.stars || []);
+
+                        return (
+                          <div
+                            key={bet.index}
+                            className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition ${
+                              bet.isPrize
+                                ? 'bg-emerald-50/70 border-emerald-200'
+                                : 'bg-white border-slate-200'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 flex-wrap">
+                              <span className="w-6 h-6 rounded-lg bg-slate-100 text-slate-700 font-mono font-bold text-xs flex items-center justify-center border border-slate-200">
+                                {bet.index}
+                              </span>
+
+                              {/* Numbers */}
+                              <div className="flex items-center gap-1 flex-wrap">
+                                {bet.numbers.map((n) => {
+                                  const isHit = winningSet.has(n);
+                                  const isComp = currentDraw?.complementario === n;
+                                  return (
+                                    <span
+                                      key={n}
+                                      className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs transition shadow-2xs ${
+                                        isHit
+                                          ? 'bg-emerald-600 text-white font-black ring-2 ring-emerald-400'
+                                          : isComp
+                                          ? 'bg-indigo-600 text-white font-bold ring-2 ring-indigo-300'
+                                          : 'bg-slate-100 text-slate-800 border border-slate-300'
+                                      }`}
+                                      title={
+                                        isHit
+                                          ? 'Número acertado'
+                                          : isComp
+                                          ? 'Complementario'
+                                          : ''
+                                      }
+                                    >
+                                      {n}
+                                    </span>
+                                  );
+                                })}
+
+                                {/* Stars if Euromillones */}
+                                {bet.stars && bet.stars.length > 0 && (
+                                  <div className="flex items-center gap-1 ml-1 pl-1 border-l border-slate-300">
+                                    {bet.stars.map((s) => {
+                                      const isStarHit = winningStarsSet.has(s);
+                                      return (
+                                        <span
+                                          key={s}
+                                          className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-xs transition shadow-2xs ${
+                                            isStarHit
+                                              ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-300'
+                                              : 'bg-amber-50 text-amber-900 border border-amber-300'
+                                          }`}
+                                          title={isStarHit ? 'Estrella acertada' : ''}
+                                        >
+                                          ★{s}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Bet Scrutiny Category and Estimated Prize */}
+                            <div className="flex items-center gap-3 self-end sm:self-center shrink-0 text-xs">
+                              <span
+                                className={`px-2.5 py-1 rounded-full font-bold border ${
+                                  bet.isPrize
+                                    ? 'bg-emerald-600 text-white border-emerald-500 shadow-2xs'
+                                    : 'bg-slate-100 text-slate-600 border-slate-200'
+                                }`}
+                              >
+                                {bet.prizeCategory}
+                              </span>
+
+                              <span className="font-mono font-bold text-sm min-w-[70px] text-right text-slate-900">
+                                {bet.estimatedPrize > 0
+                                  ? `${bet.estimatedPrize.toLocaleString('es-ES', {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })} €`
+                                  : '0,00 €'}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* Bottom Actions for current ticket */}
                 <div className="mt-4 pt-3.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
