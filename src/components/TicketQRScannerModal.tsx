@@ -69,6 +69,7 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationFrameId = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Query and list video devices
   const enumerateCameras = async () => {
@@ -380,6 +381,39 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
     setIsManualInputMode(false);
   };
 
+  // Reset current scanned ticket and immediately restart camera for scanning another ticket
+  const handleScanAnotherTicket = () => {
+    setParsedTicket(null);
+    setScannedRawText('');
+    setScrutinyResult(null);
+    setManualInputText('');
+    setCameraError(null);
+    setCameraNotice(null);
+    setIsManualInputMode(false);
+
+    // Scroll smoothly to top so scanner / camera is in full view
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Start camera immediately for the next ticket
+    startCamera(selectedDeviceId);
+  };
+
+  // Clear current ticket without automatically opening camera
+  const handleClearCurrentTicket = () => {
+    setParsedTicket(null);
+    setScannedRawText('');
+    setScrutinyResult(null);
+    setManualInputText('');
+    setCameraError(null);
+    setCameraNotice(null);
+    setIsManualInputMode(false);
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
   // Demo test ticket generator to test immediately without needing a physical paper slip
   const handleLoadDemoTicket = () => {
     let demoText = '';
@@ -508,7 +542,7 @@ Apuesta 2: 12 18 24 33 45 + 04 09`;
         </div>
 
         {/* Modal Scrollable Body */}
-        <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-5 bg-slate-100/50">
+        <div ref={scrollContainerRef} className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-5 bg-slate-100/50">
           {/* Scanner & Input Controls Card */}
           <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-xs">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
@@ -524,6 +558,18 @@ Apuesta 2: 12 18 24 33 45 + 04 09`;
 
               {/* Action Buttons */}
               <div className="flex items-center gap-2 flex-wrap">
+                {parsedTicket && (
+                  <button
+                    id="scan-another-top-card-btn"
+                    onClick={handleScanAnotherTicket}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-xs cursor-pointer active:scale-95"
+                    title="Limpiar este boleto y activar la cámara para escanear el siguiente"
+                  >
+                    <QrCode className="w-3.5 h-3.5" />
+                    <span>Escanear Siguiente Boleto</span>
+                  </button>
+                )}
+
                 {!isCameraActive ? (
                   <button
                     onClick={() => startCamera()}
@@ -791,28 +837,41 @@ Apuesta 2: 12 18 24 33 45 + 04 09`;
                     )}
                   </div>
 
-                  {/* Reintegro Quick Selector for Primitiva/Bonoloto */}
-                  {selectedGame !== 'euromillones' && (
-                    <div className="flex items-center gap-2 self-start sm:self-center bg-slate-50 p-1.5 rounded-xl border border-slate-200 text-xs">
-                      <span className="font-semibold text-slate-700">Reintegro del boleto (R):</span>
-                      <select
-                        value={customReintegro !== undefined ? customReintegro : ''}
-                        onChange={(e) =>
-                          setCustomReintegro(
-                            e.target.value === '' ? undefined : parseInt(e.target.value, 10)
-                          )
-                        }
-                        className="px-2 py-0.5 rounded-md bg-white border border-slate-300 font-bold font-mono text-xs shadow-2xs"
-                      >
-                        <option value="">Sin definir</option>
-                        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((r) => (
-                          <option key={r} value={r}>
-                            R: {r} {currentDraw?.reintegro === r ? '★ (Premio)' : ''}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
+                  {/* Actions & Reintegro */}
+                  <div className="flex items-center gap-2 flex-wrap self-start sm:self-center">
+                    <button
+                      id="scan-another-ticket-header-btn"
+                      onClick={handleScanAnotherTicket}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition shadow-xs cursor-pointer active:scale-95"
+                      title="Activar la cámara para escanear el siguiente boleto"
+                    >
+                      <QrCode className="w-3.5 h-3.5" />
+                      <span>Escanear Otro Boleto</span>
+                    </button>
+
+                    {/* Reintegro Quick Selector for Primitiva/Bonoloto */}
+                    {selectedGame !== 'euromillones' && (
+                      <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-xl border border-slate-200 text-xs">
+                        <span className="font-semibold text-slate-700">Reintegro (R):</span>
+                        <select
+                          value={customReintegro !== undefined ? customReintegro : ''}
+                          onChange={(e) =>
+                            setCustomReintegro(
+                              e.target.value === '' ? undefined : parseInt(e.target.value, 10)
+                            )
+                          }
+                          className="px-2 py-0.5 rounded-md bg-white border border-slate-300 font-bold font-mono text-xs shadow-2xs"
+                        >
+                          <option value="">Sin definir</option>
+                          {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((r) => (
+                            <option key={r} value={r}>
+                              R: {r} {currentDraw?.reintegro === r ? '★ (Premio)' : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Draw Official Winning Numbers Bar */}
@@ -1002,6 +1061,27 @@ Apuesta 2: 12 18 24 33 45 + 04 09`;
                     );
                   })}
                 </div>
+
+                {/* Bottom Actions for current ticket */}
+                <div className="mt-4 pt-3.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+                  <button
+                    id="scan-another-ticket-bottom-btn"
+                    onClick={handleScanAnotherTicket}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer"
+                  >
+                    <QrCode className="w-4 h-4" />
+                    <span>Escanear Otro Boleto</span>
+                  </button>
+
+                  <button
+                    id="clear-ticket-bottom-btn"
+                    onClick={handleClearCurrentTicket}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs border border-slate-200 transition cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Limpiar resultado</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -1027,19 +1107,31 @@ Apuesta 2: 12 18 24 33 45 + 04 09`;
         </div>
 
         {/* Modal Footer */}
-        <div className="bg-slate-50 border-t border-slate-200 px-5 py-3 flex items-center justify-between text-xs">
-          <span className="text-slate-500">
+        <div className="bg-slate-50 border-t border-slate-200 px-5 py-3 flex items-center justify-between gap-3 text-xs">
+          <span className="text-slate-500 truncate">
             {allDraws.length} sorteos oficiales sincronizados en la base de datos
           </span>
-          <button
-            onClick={() => {
-              stopCamera();
-              onClose();
-            }}
-            className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition cursor-pointer"
-          >
-            Cerrar Lector
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {parsedTicket && (
+              <button
+                id="scan-another-ticket-footer-btn"
+                onClick={handleScanAnotherTicket}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold transition shadow-xs cursor-pointer active:scale-95"
+              >
+                <QrCode className="w-3.5 h-3.5" />
+                <span>Escanear Otro Boleto</span>
+              </button>
+            )}
+            <button
+              onClick={() => {
+                stopCamera();
+                onClose();
+              }}
+              className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition cursor-pointer"
+            >
+              Cerrar Lector
+            </button>
+          </div>
         </div>
       </div>
     </div>

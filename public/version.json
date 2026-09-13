@@ -1,7 +1,7 @@
 {
-  "version": "2.8.1",
-  "buildTime": 1773486000000,
-  "buildDate": "2026-09-13T10:55:00.000Z",
+  "version": "2.8.2",
+  "buildTime": 1773487000000,
+  "buildDate": "2026-09-13T11:06:00.000Z",
   "appName": "LotoEstadísticas & Reductor",
-  "notes": "Optimización del Lector QR de boletos con selector de cámaras, enlace directo con callback ref y resolución de carga de visor de cámara."
+  "notes": "Añadidos botones para escanear de forma continua otro boleto sin necesidad de salir ni reiniciar el lector de QR."
 }
