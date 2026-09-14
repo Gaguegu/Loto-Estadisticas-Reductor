@@ -46,6 +46,7 @@ import {
   Plus,
   Trash2,
   Save,
+  Smartphone,
 } from 'lucide-react';
 
 interface TicketQRScannerModalProps {
@@ -66,6 +67,7 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
   const [selectedGame, setSelectedGame] = useState<GameType>(initialGame);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [isStartingCamera, setIsStartingCamera] = useState(false);
+  const [isProcessingImage, setIsProcessingImage] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameraNotice, setCameraNotice] = useState<string | null>(null);
   const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
@@ -188,6 +190,33 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
     setMultiDrawResult(multiRes);
   }, [parsedTicket, selectedDrawId, customReintegro, availableDraws, ticketScope, allDraws, selectedGame]);
 
+  // Helper with timeout to prevent hanging indefinitely in Android WebViews where permission isn't prompted
+  const requestMediaStreamWithTimeout = async (
+    constraints: MediaStreamConstraints,
+    timeoutMs = 5000
+  ): Promise<MediaStream> => {
+    let timer: any;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        const err = new Error('TIMEOUT_CAMERA_ACCESS');
+        err.name = 'TimeoutError';
+        reject(err);
+      }, timeoutMs);
+    });
+
+    try {
+      const stream = await Promise.race([
+        navigator.mediaDevices.getUserMedia(constraints),
+        timeoutPromise,
+      ]);
+      clearTimeout(timer);
+      return stream;
+    } catch (e) {
+      clearTimeout(timer);
+      throw e;
+    }
+  };
+
   // Start webcam video stream
   const startCamera = async (targetDeviceId?: string) => {
     setCameraError(null);
@@ -206,7 +235,7 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
 
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error('Tu navegador no permite el acceso a la cámara o estás en un entorno restringido.');
+        throw new Error('Tu dispositivo o navegador no permite el acceso a la cámara en directo. Usa el botón «📸 Hacer Foto al Boleto».');
       }
 
       const deviceIdToUse = targetDeviceId !== undefined ? targetDeviceId : selectedDeviceId;
@@ -234,11 +263,14 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
 
       let stream: MediaStream;
       try {
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        stream = await requestMediaStreamWithTimeout(constraints, 5000);
       } catch (firstErr: any) {
+        if (firstErr.name === 'TimeoutError' || firstErr.message === 'TIMEOUT_CAMERA_ACCESS') {
+          throw firstErr;
+        }
         console.warn('Constraint getUserMedia failed, retrying with fallback:', firstErr);
         // Fallback to basic video request if constrained request fails
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        stream = await requestMediaStreamWithTimeout({ video: true, audio: false }, 4000);
       }
 
       streamRef.current = stream;
@@ -251,17 +283,21 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
       console.error('Camera access error:', err);
       setIsStartingCamera(false);
       setIsCameraActive(false);
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+      if (err.name === 'TimeoutError' || err.message === 'TIMEOUT_CAMERA_ACCESS') {
         setCameraError(
-          'Permiso denegado en el navegador. Haz clic en el icono de cámara o candado junto a la barra de direcciones de Chrome y pulsa «Permitir».'
+          'La cámara en directo no respondió (restringido en aplicaciones Android/WebView). Pulsa en el botón verde «📸 Hacer Foto al Boleto» para abrir la cámara nativa de tu teléfono y escanear el boleto al instante.'
+        );
+      } else if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setCameraError(
+          'Permiso denegado en el navegador o app. En móviles, pulsa en el botón verde «📸 Hacer Foto al Boleto» para usar la cámara nativa sin necesidad de permisos especiales en la app.'
         );
       } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
         setCameraError(
-          'La cámara seleccionada no responde o está ocupada por otra app (típico de cámaras virtuales de móviles cuando no están activas). Por favor selecciona tu cámara web física en el desplegable.'
+          'La cámara seleccionada no responde o está ocupada por otra app. Pulsa en «📸 Hacer Foto al Boleto» para escanear con la cámara de fotos de tu móvil.'
         );
       } else {
         setCameraError(
-          `No se pudo iniciar la cámara (${err.message || 'error desconocido'}). Prueba a seleccionar otra cámara o sube una imagen del boleto.`
+          `No se pudo iniciar la cámara en directo (${err.message || 'error desconocido'}). Usa «📸 Hacer Foto al Boleto» para escanear el resguardo directamente.`
         );
       }
     }
@@ -402,35 +438,83 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
     setIsEditingBets(false);
   };
 
-  // Process image upload from file (phone gallery / photo)
+  // Process image upload from file (phone camera capture / gallery)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    setIsProcessingImage(true);
+    setCameraError(null);
 
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
       img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        if (!ctx) return;
+        try {
+          // Helper to scan canvas at a given scale for high-resolution smartphone photos
+          const scanAtScale = (scaleFactor: number): string | null => {
+            const canvas = document.createElement('canvas');
+            const targetW = Math.max(100, Math.round(img.width * scaleFactor));
+            const targetH = Math.max(100, Math.round(img.height * scaleFactor));
+            canvas.width = targetW;
+            canvas.height = targetH;
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            if (!ctx) return null;
+            ctx.drawImage(img, 0, 0, targetW, targetH);
+            const imgData = ctx.getImageData(0, 0, targetW, targetH);
+            const code = jsQR(imgData.data, imgData.width, imgData.height, {
+              inversionAttempts: 'attemptBoth',
+            });
+            return code && code.data ? code.data : null;
+          };
 
-        ctx.drawImage(img, 0, 0);
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height, {
-          inversionAttempts: 'attemptBoth',
-        });
+          const maxDimension = Math.max(img.width, img.height);
+          let primaryScale = 1;
+          if (maxDimension > 1280) {
+            primaryScale = 1280 / maxDimension;
+          }
 
-        if (code && code.data) {
-          handleCodeDetected(code.data);
-          setCameraError(null);
-        } else {
-          setCameraError('No se encontró ningún código QR legible en la imagen seleccionada. Asegúrate de enfocar con nitidez y buena iluminación.');
+          // Pass 1: scan at optimal jsQR dimension (~1280px max)
+          let qrData = scanAtScale(primaryScale);
+
+          // Pass 2: if not found and original was larger, try slightly higher resolution (1600px)
+          if (!qrData && primaryScale < 1) {
+            const secondaryScale = Math.min(1, 1600 / maxDimension);
+            if (secondaryScale !== primaryScale) {
+              qrData = scanAtScale(secondaryScale);
+            }
+          }
+
+          // Pass 3: if still not found, try original scale if not excessively large
+          if (!qrData && maxDimension <= 2000 && primaryScale !== 1) {
+            qrData = scanAtScale(1);
+          }
+
+          setIsProcessingImage(false);
+
+          if (qrData) {
+            handleCodeDetected(qrData);
+            setCameraError(null);
+          } else {
+            setCameraError(
+              'No se detectó ningún código QR legible en la foto. Consejo: Acerca la cámara más al código QR del resguardo, enfoca con nitidez y asegúrate de que tenga buena iluminación.'
+            );
+          }
+        } catch (err: any) {
+          console.error('Error scanning QR image:', err);
+          setIsProcessingImage(false);
+          setCameraError('Ocurrió un error al procesar la imagen. Por favor, inténtalo de nuevo.');
         }
       };
+      img.onerror = () => {
+        setIsProcessingImage(false);
+        setCameraError('No se pudo cargar la imagen seleccionada.');
+      };
       img.src = event.target?.result as string;
+    };
+    reader.onerror = () => {
+      setIsProcessingImage(false);
+      setCameraError('Error al leer el archivo de la cámara.');
     };
     reader.readAsDataURL(file);
     // Reset file input value
@@ -753,45 +837,78 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
                   <button
                     id="scan-another-top-card-btn"
                     onClick={handleScanAnotherTicket}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-xs cursor-pointer active:scale-95"
-                    title="Limpiar este boleto y activar la cámara para escanear el siguiente"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition shadow-xs cursor-pointer active:scale-95"
+                    title="Limpiar este boleto y preparar el lector para el siguiente"
                   >
                     <QrCode className="w-3.5 h-3.5" />
                     <span>Escanear Siguiente Boleto</span>
                   </button>
                 )}
 
+                {/* Primary Button: Native Mobile Photo (100% reliable on all phones and WebViews) */}
+                <label
+                  id="mobile-camera-capture-btn"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black transition shadow-xs cursor-pointer active:scale-95 ring-2 ring-emerald-400/30"
+                  title="Abrir directamente la cámara de fotos de tu móvil para enfocar el código QR"
+                >
+                  <Camera className="w-4 h-4 text-emerald-100" />
+                  <span>📸 Hacer Foto al Boleto</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                </label>
+
+                {/* Live stream webcam button (for PC / browsers with WebRTC) */}
                 {!isCameraActive ? (
-                  <button
-                    onClick={() => startCamera()}
-                    disabled={isStartingCamera}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-60"
-                  >
-                    {isStartingCamera ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  isStartingCamera ? (
+                    <div className="inline-flex items-center gap-1">
+                      <button
+                        disabled
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-100 text-indigo-800 text-xs font-bold transition cursor-wait"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-600" />
                         <span>Conectando...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Camera className="w-3.5 h-3.5" />
-                        <span>Activar Cámara</span>
-                      </>
-                    )}
-                  </button>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsStartingCamera(false);
+                          stopCamera();
+                        }}
+                        className="p-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold transition cursor-pointer"
+                        title="Cancelar intento de conexión en vivo"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => startCamera()}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-300 transition cursor-pointer"
+                      title="Activar cámara de vídeo en continuo (recomendado para PC/portátil con webcam)"
+                    >
+                      <Video className="w-3.5 h-3.5 text-slate-600" />
+                      <span>Cámara en Vivo</span>
+                    </button>
+                  )
                 ) : (
                   <button
                     onClick={stopCamera}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition shadow-xs cursor-pointer"
                   >
                     <CameraOff className="w-3.5 h-3.5" />
                     <span>Detener Cámara</span>
                   </button>
                 )}
 
-                <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold transition shadow-2xs cursor-pointer">
+                {/* Gallery / File upload */}
+                <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-semibold transition shadow-2xs cursor-pointer">
                   <Upload className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Subir Foto / Imagen</span>
+                  <span>Galería / Archivo</span>
                   <input
                     type="file"
                     accept="image/*"
@@ -802,7 +919,7 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
 
                 <button
                   onClick={() => setIsManualInputMode(!isManualInputMode)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-200 transition cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-200 transition cursor-pointer"
                 >
                   <Edit3 className="w-3.5 h-3.5" />
                   <span>Texto / Manual</span>
@@ -810,12 +927,22 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
 
                 <button
                   onClick={handleLoadDemoTicket}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-semibold border border-amber-200 transition cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-semibold border border-amber-200 transition cursor-pointer"
                   title="Cargar un boleto de prueba para comprobar inmediatamente"
                 >
                   <Sparkles className="w-3 h-3 text-amber-600" />
                   <span>Ejemplo Demo</span>
                 </button>
+              </div>
+
+              {/* Mobile Quick Helper Banner */}
+              <div className="w-full p-2.5 bg-emerald-50/80 border border-emerald-200/80 rounded-xl text-xs text-emerald-950 flex items-center justify-between gap-2 mt-2">
+                <div className="flex items-center gap-2">
+                  <Smartphone className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="text-[11px] text-emerald-900 leading-tight">
+                    <strong>¿Estás en el móvil?</strong> Pulsa <strong>«📸 Hacer Foto al Boleto»</strong> para abrir tu cámara directamente sin problemas de permisos.
+                  </span>
+                </div>
               </div>
 
               {/* Camera device selection dropdown (if devices enumerated) */}
@@ -853,19 +980,44 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
               )}
             </div>
 
+            {/* Image processing state indicator */}
+            {isProcessingImage && (
+              <div className="p-3.5 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-950 flex items-center gap-3 mb-3 shadow-2xs">
+                <RefreshCw className="w-5 h-5 text-indigo-600 animate-spin shrink-0" />
+                <div className="flex-1">
+                  <p className="font-bold text-indigo-900">Analizando foto del boleto...</p>
+                  <p className="text-slate-600 text-[11px]">
+                    Buscando código QR y decodificando las apuestas del resguardo.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Browser Permission Guidance Banner */}
             {isStartingCamera && (
               <div className="p-3.5 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-950 flex items-start gap-2.5 mb-3 shadow-2xs animate-pulse">
                 <RefreshCw className="w-4 h-4 text-indigo-600 animate-spin shrink-0 mt-0.5" />
                 <div className="flex-1 space-y-1">
-                  <p className="font-bold text-indigo-900">
-                    Esperando confirmación de permiso en Chrome
-                  </p>
+                  <div className="flex items-center justify-between">
+                    <p className="font-bold text-indigo-900">
+                      Conectando cámara de vídeo en directo...
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsStartingCamera(false);
+                        stopCamera();
+                      }}
+                      className="text-[11px] text-indigo-700 hover:text-indigo-900 font-bold underline cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
                   <p className="text-slate-700 leading-relaxed">
-                    👉 Haz clic en <strong>«Permitir mientras se visita el sitio»</strong> (o «Permitir esta vez») en la ventana emergente de Chrome arriba a la izquierda.
+                    👉 Si aparece un aviso de permisos en la parte superior, pulsa <strong>«Permitir»</strong>.
                   </p>
                   <p className="text-slate-600 text-[11px]">
-                    Si en esa ventana de Chrome el desplegable tiene seleccionada una cámara virtual (como <em>Windows Virtual Camera</em>) y la vista previa se queda cargando, cambia el desplegable a tu <strong>Cámara web integrada</strong> o webcam USB.
+                    En aplicaciones móviles o si tarda en responder, pulsa en <strong>«📸 Hacer Foto al Boleto»</strong> para abrir la cámara de fotos de tu móvil sin restricciones.
                   </p>
                 </div>
               </div>
@@ -919,11 +1071,24 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
 
             {/* Camera / Upload Error Warning */}
             {cameraError && (
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2 mb-3">
+              <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2.5 mb-3 shadow-2xs">
                 <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="font-bold">Aviso del lector</p>
-                  <p>{cameraError}</p>
+                <div className="flex-1 space-y-2">
+                  <p className="font-bold text-amber-950">Aviso del lector de boletos</p>
+                  <p className="leading-relaxed text-slate-800">{cameraError}</p>
+                  <div>
+                    <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer shadow-xs active:scale-95 transition">
+                      <Camera className="w-3.5 h-3.5" />
+                      <span>📸 Tomar Foto al Boleto Ahora</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
                 </div>
               </div>
             )}
