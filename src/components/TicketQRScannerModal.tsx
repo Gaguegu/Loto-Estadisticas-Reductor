@@ -1288,7 +1288,7 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
               </div>
 
               {/* Camera device selection dropdown (if devices enumerated) */}
-              {videoDevices.length > 0 && (
+              {videoDevices.length > 0 ? (
                 <div className="w-full flex items-center gap-2 pt-1 border-t border-slate-100 flex-wrap text-xs">
                   <span className="font-semibold text-slate-600 flex items-center gap-1">
                     <Video className="w-3.5 h-3.5 text-indigo-600" /> Dispositivo:
@@ -1318,6 +1318,12 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
                       Cambiar
                     </button>
                   )}
+                </div>
+              ) : (
+                <div className="w-full pt-1 border-t border-slate-100 flex items-center justify-between gap-2 text-[11px] text-slate-500 flex-wrap">
+                  <span className="flex items-center gap-1">
+                    💡 En móviles: Pulsa en <strong className="text-emerald-700">«📸 Hacer Foto al Boleto»</strong> para abrir la cámara nativa de tu teléfono al instante.
+                  </span>
                 </div>
               )}
 
