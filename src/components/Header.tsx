@@ -246,7 +246,7 @@ export const Header: React.FC<HeaderProps> = ({
                 title="Lector de QR para escanear boletos oficiales y comprobar premios"
               >
                 <QrCode className="w-3.5 h-3.5 text-amber-300" />
-                <span>Lector QR Boletos</span>
+                <span>Comprobar / QR</span>
               </button>
             )}
 
@@ -429,7 +429,7 @@ export const Header: React.FC<HeaderProps> = ({
               title="Lector QR de boletos oficiales"
             >
               <QrCode className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-              <span className="truncate">Lector QR</span>
+              <span className="truncate">Comprobar</span>
             </button>
           )}
 

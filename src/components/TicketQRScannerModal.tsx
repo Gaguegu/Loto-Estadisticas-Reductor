@@ -47,6 +47,9 @@ import {
   Trash2,
   Save,
   Smartphone,
+  Grid3X3,
+  Image as ImageIcon,
+  Dices,
 } from 'lucide-react';
 
 interface TicketQRScannerModalProps {
@@ -79,6 +82,13 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
   const [isEditingBets, setIsEditingBets] = useState<boolean>(false);
   const [editBetsText, setEditBetsText] = useState<string>('');
 
+  // Primary interaction mode: 'scanner' (camera/file/gallery), 'keypad' (touch number selection), 'manual' (text/paste)
+  const [activeMode, setActiveMode] = useState<'scanner' | 'keypad' | 'manual'>('scanner');
+  const [keypadNumbers, setKeypadNumbers] = useState<number[]>([]);
+  const [keypadStars, setKeypadStars] = useState<number[]>([]);
+  const [keypadReintegro, setKeypadReintegro] = useState<number>(0);
+  const [keypadBetsList, setKeypadBetsList] = useState<{ numbers: number[]; stars?: number[]; reintegro?: number }[]>([]);
+
   // Participation scope (single draw vs weekly / multi-draw)
   const [ticketScope, setTicketScope] = useState<TicketScope>('weekly');
   const [activeTabDayId, setActiveTabDayId] = useState<string>('all');
@@ -94,6 +104,8 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
   const animationFrameId = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const galleryInputRef = useRef<HTMLInputElement | null>(null);
 
   // Query and list video devices
   const enumerateCameras = async () => {
@@ -521,6 +533,146 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
     e.target.value = '';
   };
 
+  // Trigger native mobile camera capture
+  const handleOpenCameraCapture = () => {
+    setCameraError(null);
+    if (cameraInputRef.current) {
+      cameraInputRef.current.value = '';
+      cameraInputRef.current.click();
+    }
+  };
+
+  // Trigger gallery image picker (standard picker, highly compatible with Android WebViews)
+  const handleOpenGalleryPicker = () => {
+    setCameraError(null);
+    if (galleryInputRef.current) {
+      galleryInputRef.current.value = '';
+      galleryInputRef.current.click();
+    }
+  };
+
+  // Keypad: Toggle number in current bet
+  const handleToggleKeypadNumber = (num: number) => {
+    const maxNumbers = selectedGame === 'euromillones' ? 5 : 6;
+    setKeypadNumbers((prev) => {
+      if (prev.includes(num)) {
+        return prev.filter((n) => n !== num);
+      }
+      if (prev.length >= maxNumbers) {
+        return prev;
+      }
+      return [...prev, num].sort((a, b) => a - b);
+    });
+  };
+
+  // Keypad: Toggle star for Euromillones
+  const handleToggleKeypadStar = (star: number) => {
+    setKeypadStars((prev) => {
+      if (prev.includes(star)) {
+        return prev.filter((s) => s !== star);
+      }
+      if (prev.length >= 2) {
+        return prev;
+      }
+      return [...prev, star].sort((a, b) => a - b);
+    });
+  };
+
+  // Keypad: Clear current active selection
+  const handleClearKeypadSelection = () => {
+    setKeypadNumbers([]);
+    setKeypadStars([]);
+  };
+
+  // Keypad: Fill random valid combination
+  const handleFillRandomKeypadNumbers = () => {
+    const maxNumber = selectedGame === 'euromillones' ? 50 : 49;
+    const count = selectedGame === 'euromillones' ? 5 : 6;
+    const pool = Array.from({ length: maxNumber }, (_, i) => i + 1);
+    // Shuffle
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    const chosen = pool.slice(0, count).sort((a, b) => a - b);
+    setKeypadNumbers(chosen);
+
+    if (selectedGame === 'euromillones') {
+      const starPool = Array.from({ length: 12 }, (_, i) => i + 1);
+      for (let i = starPool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [starPool[i], starPool[j]] = [starPool[j], starPool[i]];
+      }
+      setKeypadStars(starPool.slice(0, 2).sort((a, b) => a - b));
+    } else {
+      setKeypadReintegro(Math.floor(Math.random() * 10));
+    }
+  };
+
+  // Keypad: Add current combination to list of bets
+  const handleAddKeypadBet = () => {
+    const reqNumbers = selectedGame === 'euromillones' ? 5 : 6;
+    if (keypadNumbers.length !== reqNumbers) return;
+    if (selectedGame === 'euromillones' && keypadStars.length !== 2) return;
+
+    setKeypadBetsList((prev) => [
+      ...prev,
+      {
+        numbers: [...keypadNumbers].sort((a, b) => a - b),
+        stars: selectedGame === 'euromillones' ? [...keypadStars].sort((a, b) => a - b) : undefined,
+        reintegro: selectedGame !== 'euromillones' ? keypadReintegro : undefined,
+      },
+    ]);
+    setKeypadNumbers([]);
+    setKeypadStars([]);
+  };
+
+  // Keypad: Remove a saved bet from list
+  const handleRemoveKeypadBet = (idxToRemove: number) => {
+    setKeypadBetsList((prev) => prev.filter((_, i) => i !== idxToRemove));
+  };
+
+  // Keypad: Finalize and scrutinize ticket
+  const handleCheckKeypadTicket = () => {
+    const reqNumbers = selectedGame === 'euromillones' ? 5 : 6;
+    let finalBets = [...keypadBetsList];
+
+    // If user has a valid unadded bet on screen, include it!
+    if (keypadNumbers.length === reqNumbers && (selectedGame !== 'euromillones' || keypadStars.length === 2)) {
+      finalBets.push({
+        numbers: [...keypadNumbers].sort((a, b) => a - b),
+        stars: selectedGame === 'euromillones' ? [...keypadStars].sort((a, b) => a - b) : undefined,
+        reintegro: selectedGame !== 'euromillones' ? keypadReintegro : undefined,
+      });
+    }
+
+    if (finalBets.length === 0) return;
+
+    const newTicket: ParsedTicketData = {
+      raw: `TECLADO_${selectedGame.toUpperCase()}`,
+      game: selectedGame,
+      reintegro: selectedGame !== 'euromillones' ? keypadReintegro : undefined,
+      ticketScope: ticketScope,
+      isOfficialSELAECode: false,
+      notes: 'Boleto introducido mediante el teclado táctil',
+      bets: finalBets.map((b, idx) => ({
+        index: idx + 1,
+        numbers: b.numbers,
+        stars: b.stars,
+        reintegro: b.reintegro ?? keypadReintegro,
+      })),
+    };
+
+    setParsedTicket(newTicket);
+    setCustomReintegro(selectedGame !== 'euromillones' ? keypadReintegro : undefined);
+    setIsEditingBets(false);
+    setActiveTabDayId('all');
+
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
   // Process manual code or combination text input
   const handleProcessManualInput = () => {
     if (!manualInputText.trim()) return;
@@ -528,7 +680,7 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
     setIsManualInputMode(false);
   };
 
-  // Reset current scanned ticket and immediately restart camera for scanning another ticket
+  // Reset current scanned ticket and return to scanner or keypad smoothly
   const handleScanAnotherTicket = () => {
     setParsedTicket(null);
     setScannedRawText('');
@@ -540,14 +692,14 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
     setCameraNotice(null);
     setIsManualInputMode(false);
     setIsEditingBets(false);
+    setKeypadNumbers([]);
+    setKeypadStars([]);
+    setKeypadBetsList([]);
 
-    // Scroll smoothly to top so scanner / camera is in full view
+    // Scroll smoothly to top
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
     }
-
-    // Start camera immediately for the next ticket
-    startCamera(selectedDeviceId);
   };
 
   // Clear current ticket without automatically opening camera
@@ -715,25 +867,25 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
   const currentDraw = availableDraws.find((d) => d.id === selectedDrawId) || availableDraws[0];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className="bg-white w-full h-full sm:h-auto sm:max-h-[92vh] sm:max-w-4xl sm:rounded-2xl shadow-2xl border-0 sm:border sm:border-slate-200 overflow-hidden flex flex-col">
         {/* Modal Top Bar */}
-        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-5 py-3.5 flex items-center justify-between border-b border-indigo-900/40">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300">
-              <QrCode className="w-5 h-5" />
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-3.5 sm:px-5 py-2.5 sm:py-3.5 flex items-center justify-between border-b border-indigo-900/40 shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300 shrink-0">
+              <QrCode className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-black text-white">
-                  Lector de QR &amp; Comprobador de Boletos
+                <h2 className="text-sm sm:text-base md:text-lg font-black text-white">
+                  Comprobador de Boletos &amp; QR
                 </h2>
-                <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-indigo-500/30 text-indigo-200 border border-indigo-400/30">
-                  En vivo
+                <span className="hidden sm:inline text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-indigo-500/30 text-indigo-200 border border-indigo-400/30">
+                  SELAE
                 </span>
               </div>
-              <p className="text-xs text-slate-300">
-                Escanea el código QR de tu resguardo o sube una foto para comprobar aciertos e importe obtenido
+              <p className="text-[11px] sm:text-xs text-slate-300 line-clamp-1">
+                Comprueba aciertos y premios de tu boleto por foto, escáner o teclado
               </p>
             </div>
           </div>
@@ -742,23 +894,28 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
               stopCamera();
               onClose();
             }}
-            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+            className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer shrink-0"
+            title="Cerrar comprobador"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Game and Draw Selection Filter */}
-        <div className="bg-slate-50 border-b border-slate-200 px-5 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="font-semibold text-slate-600 mr-1">Juego:</span>
+        <div className="bg-slate-50 border-b border-slate-200 px-3 sm:px-5 py-2 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0">
+          <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
+            <span className="font-bold text-slate-600 mr-1 hidden xs:inline">Juego:</span>
             <button
+              type="button"
               onClick={() => {
                 setSelectedGame('primitiva');
                 setParsedTicket(null);
                 setScrutinyResult(null);
+                setKeypadNumbers([]);
+                setKeypadStars([]);
+                setKeypadBetsList([]);
               }}
-              className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
+              className={`px-2.5 py-1 rounded-lg font-bold text-xs transition cursor-pointer ${
                 selectedGame === 'primitiva'
                   ? 'bg-emerald-600 text-white shadow-xs'
                   : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-200'
@@ -767,12 +924,16 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
               La Primitiva
             </button>
             <button
+              type="button"
               onClick={() => {
                 setSelectedGame('bonoloto');
                 setParsedTicket(null);
                 setScrutinyResult(null);
+                setKeypadNumbers([]);
+                setKeypadStars([]);
+                setKeypadBetsList([]);
               }}
-              className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
+              className={`px-2.5 py-1 rounded-lg font-bold text-xs transition cursor-pointer ${
                 selectedGame === 'bonoloto'
                   ? 'bg-blue-600 text-white shadow-xs'
                   : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-200'
@@ -781,12 +942,16 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
               Bonoloto
             </button>
             <button
+              type="button"
               onClick={() => {
                 setSelectedGame('euromillones');
                 setParsedTicket(null);
                 setScrutinyResult(null);
+                setKeypadNumbers([]);
+                setKeypadStars([]);
+                setKeypadBetsList([]);
               }}
-              className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
+              className={`px-2.5 py-1 rounded-lg font-bold text-xs transition cursor-pointer ${
                 selectedGame === 'euromillones'
                   ? 'bg-amber-400 text-slate-950 font-black shadow-xs'
                   : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-200'
@@ -797,14 +962,15 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
           </div>
 
           {/* Sorteo a comprobar */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 ml-auto">
             <span className="font-semibold text-slate-600 flex items-center gap-1">
-              <Calendar className="w-3.5 h-3.5 text-indigo-600" /> Sorteo:
+              <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+              <span className="hidden sm:inline">Sorteo:</span>
             </span>
             <select
               value={selectedDrawId}
               onChange={(e) => setSelectedDrawId(e.target.value)}
-              className="px-2.5 py-1 rounded-lg bg-white border border-slate-300 font-semibold text-slate-800 text-xs shadow-2xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              className="max-w-[170px] sm:max-w-none px-2 py-1 rounded-lg bg-white border border-slate-300 font-semibold text-slate-800 text-xs shadow-2xs focus:ring-2 focus:ring-indigo-500 focus:outline-none truncate"
             >
               {availableDraws.map((d) => (
                 <option key={d.id} value={d.id}>
@@ -816,140 +982,215 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
           </div>
         </div>
 
-        {/* Modal Scrollable Body */}
-        <div ref={scrollContainerRef} className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-5 bg-slate-100/50">
-          {/* Scanner & Input Controls Card */}
-          <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-              <div>
-                <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
-                  <Camera className="w-4 h-4 text-indigo-600" />
-                  Escanear código QR del boleto
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Apunta con la cámara de tu móvil u ordenador al código QR impreso en el resguardo oficial.
-                </p>
-              </div>
+        {/* Verification Method Navigation Tabs */}
+        <div className="bg-slate-100/90 border-b border-slate-200 px-3 sm:px-5 py-1.5 flex items-center gap-1.5 sm:gap-2 overflow-x-auto shrink-0">
+          <button
+            type="button"
+            onClick={() => setActiveMode('scanner')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+              activeMode === 'scanner'
+                ? 'bg-white text-indigo-950 shadow-xs border border-slate-300'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
+            }`}
+          >
+            <Camera className="w-3.5 h-3.5 text-emerald-600" />
+            <span>📸 Foto / Escáner QR</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveMode('keypad')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+              activeMode === 'keypad'
+                ? 'bg-white text-indigo-950 shadow-xs border border-slate-300'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
+            }`}
+          >
+            <Grid3X3 className="w-3.5 h-3.5 text-indigo-600" />
+            <span>✍️ Teclado Táctil</span>
+            <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 ml-1">
+              100% Funcional
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveMode('manual')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+              activeMode === 'manual'
+                ? 'bg-white text-indigo-950 shadow-xs border border-slate-300'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
+            }`}
+          >
+            <Edit3 className="w-3.5 h-3.5 text-slate-600" />
+            <span>📋 Texto / Copiar Pegar</span>
+          </button>
+        </div>
 
-              {/* Action Buttons */}
-              <div className="flex items-center gap-2 flex-wrap">
+        {/* Hidden inputs to trigger mobile camera intent or gallery picker */}
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleFileUpload}
+          className="hidden"
+          id="qr-camera-direct-input"
+        />
+        <input
+          ref={galleryInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFileUpload}
+          className="hidden"
+          id="qr-gallery-direct-input"
+        />
+
+        {/* Modal Scrollable Body */}
+        <div ref={scrollContainerRef} className="p-3 sm:p-5 overflow-y-auto flex-1 space-y-4 bg-slate-100/50">
+          
+          {/* TAB 1: SCANNER & PHOTO INPUT */}
+          {activeMode === 'scanner' && (
+            <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+                    <Camera className="w-4 h-4 text-indigo-600" />
+                    Comprobar con Foto o Código QR
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Toma una foto con tu móvil al resguardo oficial o usa la cámara web para escanear el QR.
+                  </p>
+                </div>
+
                 {parsedTicket && (
                   <button
                     id="scan-another-top-card-btn"
                     onClick={handleScanAnotherTicket}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition shadow-xs cursor-pointer active:scale-95"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition shadow-xs cursor-pointer active:scale-95 self-start sm:self-auto"
                     title="Limpiar este boleto y preparar el lector para el siguiente"
                   >
                     <QrCode className="w-3.5 h-3.5" />
                     <span>Escanear Siguiente Boleto</span>
                   </button>
                 )}
+              </div>
 
-                {/* Primary Button: Native Mobile Photo (100% reliable on all phones and WebViews) */}
-                <label
-                  id="mobile-camera-capture-btn"
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black transition shadow-xs cursor-pointer active:scale-95 ring-2 ring-emerald-400/30"
-                  title="Abrir directamente la cámara de fotos de tu móvil para enfocar el código QR"
-                >
-                  <Camera className="w-4 h-4 text-emerald-100" />
-                  <span>📸 Hacer Foto al Boleto</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                </label>
-
-                {/* Live stream webcam button (for PC / browsers with WebRTC) */}
-                {!isCameraActive ? (
-                  isStartingCamera ? (
-                    <div className="inline-flex items-center gap-1">
-                      <button
-                        disabled
-                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-100 text-indigo-800 text-xs font-bold transition cursor-wait"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-600" />
-                        <span>Conectando...</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsStartingCamera(false);
-                          stopCamera();
-                        }}
-                        className="p-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold transition cursor-pointer"
-                        title="Cancelar intento de conexión en vivo"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => startCamera()}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-300 transition cursor-pointer"
-                      title="Activar cámara de vídeo en continuo (recomendado para PC/portátil con webcam)"
-                    >
-                      <Video className="w-3.5 h-3.5 text-slate-600" />
-                      <span>Cámara en Vivo</span>
-                    </button>
-                  )
-                ) : (
-                  <button
-                    onClick={stopCamera}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition shadow-xs cursor-pointer"
-                  >
-                    <CameraOff className="w-3.5 h-3.5" />
-                    <span>Detener Cámara</span>
-                  </button>
-                )}
-
-                {/* Gallery / File upload */}
-                <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-semibold transition shadow-2xs cursor-pointer">
-                  <Upload className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Galería / Archivo</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                </label>
-
+              {/* Action Buttons: 2 Big Mobile-Friendly Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                {/* Primary Button: Mobile Camera Intent */}
                 <button
-                  onClick={() => setIsManualInputMode(!isManualInputMode)}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-200 transition cursor-pointer"
+                  type="button"
+                  id="mobile-camera-capture-trigger"
+                  onClick={handleOpenCameraCapture}
+                  className="flex items-center gap-3 p-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-sm transition active:scale-98 text-left cursor-pointer border border-emerald-500/50 group"
                 >
-                  <Edit3 className="w-3.5 h-3.5" />
-                  <span>Texto / Manual</span>
+                  <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
+                    <Camera className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-black text-sm text-white">📸 Hacer Foto al Boleto</span>
+                      <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-white/25 text-white">Móvil</span>
+                    </div>
+                    <p className="text-[11px] text-emerald-100 leading-tight mt-0.5">
+                      Abre la cámara de tu teléfono al instante para enfocar el resguardo
+                    </p>
+                  </div>
                 </button>
 
+                {/* Secondary Button: Gallery Picker */}
                 <button
-                  onClick={handleLoadDemoTicket}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-semibold border border-amber-200 transition cursor-pointer"
-                  title="Cargar un boleto de prueba para comprobar inmediatamente"
+                  type="button"
+                  id="gallery-file-picker-trigger"
+                  onClick={handleOpenGalleryPicker}
+                  className="flex items-center gap-3 p-3.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-300 shadow-2xs transition active:scale-98 text-left cursor-pointer group"
                 >
-                  <Sparkles className="w-3 h-3 text-amber-600" />
-                  <span>Ejemplo Demo</span>
+                  <div className="w-11 h-11 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
+                    <ImageIcon className="w-6 h-6 text-indigo-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-sm text-slate-900">🖼️ Elegir de la Galería</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-tight mt-0.5">
+                      Selecciona una foto ya guardada en tu teléfono o archivo de tu PC
+                    </p>
+                  </div>
                 </button>
               </div>
 
-              {/* Mobile Quick Helper Banner */}
-              <div className="w-full p-2.5 bg-emerald-50/80 border border-emerald-200/80 rounded-xl text-xs text-emerald-950 flex items-center justify-between gap-2 mt-2">
-                <div className="flex items-center gap-2">
-                  <Smartphone className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span className="text-[11px] text-emerald-900 leading-tight">
-                    <strong>¿Estás en el móvil?</strong> Pulsa <strong>«📸 Hacer Foto al Boleto»</strong> para abrir tu cámara directamente sin problemas de permisos.
-                  </span>
+              {/* Secondary Actions Bar */}
+              <div className="flex items-center justify-between gap-2 flex-wrap pt-2 border-t border-slate-100">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {!isCameraActive ? (
+                    isStartingCamera ? (
+                      <div className="inline-flex items-center gap-1">
+                        <button
+                          disabled
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-100 text-indigo-800 text-xs font-bold transition cursor-wait"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+                          <span>Conectando cámara en directo...</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsStartingCamera(false);
+                            stopCamera();
+                          }}
+                          className="p-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold transition cursor-pointer"
+                          title="Cancelar"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => startCamera()}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-300 transition cursor-pointer"
+                        title="Activar cámara de vídeo en continuo (para PC o portátiles con webcam)"
+                      >
+                        <Video className="w-3.5 h-3.5 text-slate-600" />
+                        <span>Cámara en Directo (Webcam)</span>
+                      </button>
+                    )
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={stopCamera}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+                    >
+                      <CameraOff className="w-3.5 h-3.5" />
+                      <span>Detener Cámara</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveMode('keypad')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-800 text-xs font-bold border border-indigo-200 transition cursor-pointer"
+                  >
+                    <Grid3X3 className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Teclado Táctil de Números</span>
+                  </button>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={handleLoadDemoTicket}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-semibold border border-amber-200 transition cursor-pointer ml-auto"
+                  title="Cargar un boleto de prueba para comprobar inmediatamente"
+                >
+                  <Sparkles className="w-3 h-3 text-amber-600" />
+                  <span>Probar Boleto Demo</span>
+                </button>
               </div>
 
               {/* Camera device selection dropdown (if devices enumerated) */}
               {videoDevices.length > 0 && (
-                <div className="w-full flex items-center gap-2 pt-2 border-t border-slate-100 flex-wrap">
-                  <span className="text-xs font-semibold text-slate-600 flex items-center gap-1">
-                    <Video className="w-3.5 h-3.5 text-indigo-600" /> Dispositivo de cámara:
+                <div className="w-full flex items-center gap-2 pt-1 border-t border-slate-100 flex-wrap text-xs">
+                  <span className="font-semibold text-slate-600 flex items-center gap-1">
+                    <Video className="w-3.5 h-3.5 text-indigo-600" /> Dispositivo:
                   </span>
                   <select
                     value={selectedDeviceId}
@@ -960,7 +1201,7 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
                         startCamera(devId);
                       }
                     }}
-                    className="px-2.5 py-1 rounded-lg bg-white border border-slate-300 font-medium text-slate-800 text-xs shadow-2xs focus:ring-2 focus:ring-indigo-500 focus:outline-none max-w-sm truncate"
+                    className="px-2 py-1 rounded-lg bg-white border border-slate-300 font-medium text-slate-800 text-xs shadow-2xs focus:ring-2 focus:ring-indigo-500 focus:outline-none max-w-sm truncate"
                   >
                     {videoDevices.map((dev, idx) => (
                       <option key={dev.deviceId || idx} value={dev.deviceId}>
@@ -973,223 +1214,488 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
                       onClick={() => startCamera(selectedDeviceId)}
                       className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold underline cursor-pointer"
                     >
-                      Cambiar a esta cámara
+                      Cambiar
                     </button>
                   )}
                 </div>
               )}
+
+              {/* Image processing state indicator */}
+              {isProcessingImage && (
+                <div className="p-3.5 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-950 flex items-center gap-3 shadow-2xs animate-pulse">
+                  <RefreshCw className="w-5 h-5 text-indigo-600 animate-spin shrink-0" />
+                  <div className="flex-1">
+                    <p className="font-bold text-indigo-900">Analizando foto del boleto...</p>
+                    <p className="text-slate-600 text-[11px]">
+                      Buscando código QR y decodificando números del resguardo.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Live Camera Viewport */}
+              {isCameraActive && (
+                <div className="relative rounded-2xl overflow-hidden bg-black border-2 border-indigo-500/50 shadow-inner flex flex-col items-center justify-center min-h-[240px] max-h-[360px]">
+                  <video
+                    ref={handleVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover max-h-[340px]"
+                  />
+                  <canvas ref={canvasRef} className="hidden" />
+
+                  {/* Laser scan line overlay effect */}
+                  <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                    <div className="w-56 h-56 border-2 border-indigo-400/80 rounded-2xl relative shadow-[0_0_20px_rgba(99,102,241,0.4)]">
+                      <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-white"></div>
+                      <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-white"></div>
+                      <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-white"></div>
+                      <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-white"></div>
+                      <div className="w-full h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent absolute top-1/2 -translate-y-1/2 animate-pulse shadow-[0_0_8px_#34d399]"></div>
+                    </div>
+                  </div>
+
+                  <div className="absolute bottom-3 bg-black/75 backdrop-blur-xs text-white text-xs px-3 py-1 rounded-full font-medium flex items-center gap-1.5">
+                    <RefreshCw className="w-3 h-3 animate-spin text-emerald-400" />
+                    <span>Enfoca el código QR dentro del recuadro...</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Camera Error Banner with Direct Recovery Actions */}
+              {cameraError && (
+                <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-950 flex items-start gap-2.5 shadow-2xs">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="flex-1 space-y-2">
+                    <p className="font-bold text-amber-950">Aviso sobre el acceso a la cámara</p>
+                    <p className="leading-relaxed text-slate-800">{cameraError}</p>
+                    <div className="flex items-center gap-2 flex-wrap pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setActiveMode('keypad')}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs cursor-pointer shadow-xs active:scale-95 transition"
+                      >
+                        <Grid3X3 className="w-3.5 h-3.5" />
+                        <span>✍️ Usar Teclado Táctil</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleOpenGalleryPicker}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 font-bold text-xs cursor-pointer shadow-2xs active:scale-95 transition"
+                      >
+                        <ImageIcon className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>🖼️ Elegir de la Galería</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleOpenCameraCapture}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer shadow-xs active:scale-95 transition"
+                      >
+                        <Camera className="w-3.5 h-3.5" />
+                        <span>📸 Hacer Foto</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
+          )}
 
-            {/* Image processing state indicator */}
-            {isProcessingImage && (
-              <div className="p-3.5 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-950 flex items-center gap-3 mb-3 shadow-2xs">
-                <RefreshCw className="w-5 h-5 text-indigo-600 animate-spin shrink-0" />
-                <div className="flex-1">
-                  <p className="font-bold text-indigo-900">Analizando foto del boleto...</p>
-                  <p className="text-slate-600 text-[11px]">
-                    Buscando código QR y decodificando las apuestas del resguardo.
+          {/* TAB 2: INTERACTIVE TOUCH KEYPAD (Zero permissions needed, 100% reliable on all phones) */}
+          {activeMode === 'keypad' && (
+            <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Grid3X3 className="w-4 h-4 text-indigo-600" />
+                    <h3 className="font-black text-slate-900 text-sm sm:text-base">
+                      Teclado Táctil de Comprobación
+                    </h3>
+                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
+                      Rápido y Directo
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Toca los números de tu resguardo para comprobar premios al instante, sin depender de la cámara.
                   </p>
                 </div>
-              </div>
-            )}
 
-            {/* Browser Permission Guidance Banner */}
-            {isStartingCamera && (
-              <div className="p-3.5 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-950 flex items-start gap-2.5 mb-3 shadow-2xs animate-pulse">
-                <RefreshCw className="w-4 h-4 text-indigo-600 animate-spin shrink-0 mt-0.5" />
-                <div className="flex-1 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <p className="font-bold text-indigo-900">
-                      Conectando cámara de vídeo en directo...
-                    </p>
+                {/* Scope selector */}
+                <div className="flex items-center gap-1 self-start sm:self-auto bg-slate-100 p-1 rounded-lg text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setTicketScope('weekly')}
+                    className={`px-2.5 py-1 rounded-md font-bold transition cursor-pointer ${
+                      ticketScope === 'weekly'
+                        ? 'bg-white text-indigo-900 shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Semanal (Toda la semana)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTicketScope('single')}
+                    className={`px-2.5 py-1 rounded-md font-bold transition cursor-pointer ${
+                      ticketScope === 'single'
+                        ? 'bg-white text-indigo-900 shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    1 Sorteo
+                  </button>
+                </div>
+              </div>
+
+              {/* Current Bet Status Card */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 sm:p-4 space-y-2.5">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <span className="text-xs font-bold text-slate-700">
+                    Apuesta {keypadBetsList.length + 1}:
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-slate-600">
+                      {keypadNumbers.length} de {selectedGame === 'euromillones' ? '5' : '6'} números marcados
+                    </span>
+                    {selectedGame === 'euromillones' && (
+                      <span className="text-xs font-semibold text-amber-700">
+                        • {keypadStars.length} de 2 estrellas
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Selected Balls Preview */}
+                <div className="flex items-center gap-1.5 flex-wrap min-h-[38px] p-2 bg-white rounded-lg border border-slate-200">
+                  {keypadNumbers.length === 0 ? (
+                    <span className="text-xs text-slate-400 italic">
+                      Toca los números abajo para añadirlos a tu apuesta...
+                    </span>
+                  ) : (
+                    keypadNumbers.map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => handleToggleKeypadNumber(n)}
+                        className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs text-white shadow-2xs transition active:scale-95 cursor-pointer ${
+                          selectedGame === 'primitiva'
+                            ? 'bg-emerald-600 hover:bg-emerald-700'
+                            : selectedGame === 'bonoloto'
+                            ? 'bg-blue-600 hover:bg-blue-700'
+                            : 'bg-indigo-600 hover:bg-indigo-700'
+                        }`}
+                        title="Toca para quitar"
+                      >
+                        {n}
+                      </button>
+                    ))
+                  )}
+
+                  {/* Stars preview for Euromillones */}
+                  {selectedGame === 'euromillones' && keypadStars.map((s) => (
                     <button
+                      key={`star-${s}`}
                       type="button"
-                      onClick={() => {
-                        setIsStartingCamera(false);
-                        stopCamera();
-                      }}
-                      className="text-[11px] text-indigo-700 hover:text-indigo-900 font-bold underline cursor-pointer"
+                      onClick={() => handleToggleKeypadStar(s)}
+                      className="w-8 h-8 rounded-full bg-amber-400 hover:bg-amber-500 text-slate-950 flex items-center justify-center font-black text-xs shadow-2xs transition active:scale-95 cursor-pointer"
+                      title="Toca para quitar estrella"
                     >
-                      Cancelar
+                      ★{s}
                     </button>
-                  </div>
-                  <p className="text-slate-700 leading-relaxed">
-                    👉 Si aparece un aviso de permisos en la parte superior, pulsa <strong>«Permitir»</strong>.
-                  </p>
-                  <p className="text-slate-600 text-[11px]">
-                    En aplicaciones móviles o si tarda en responder, pulsa en <strong>«📸 Hacer Foto al Boleto»</strong> para abrir la cámara de fotos de tu móvil sin restricciones.
-                  </p>
-                </div>
-              </div>
-            )}
+                  ))}
 
-            {/* Camera Viewport */}
-            {isCameraActive && (
-              <div className="relative rounded-2xl overflow-hidden bg-black border-2 border-indigo-500/50 shadow-inner flex flex-col items-center justify-center min-h-[260px] max-h-[380px] mb-4">
-                <video
-                  ref={handleVideoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover max-h-[360px]"
-                />
-                <canvas ref={canvasRef} className="hidden" />
-
-                {/* Laser scan line overlay effect */}
-                <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                  <div className="w-64 h-64 border-2 border-indigo-400/80 rounded-2xl relative shadow-[0_0_20px_rgba(99,102,241,0.4)]">
-                    <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-white"></div>
-                    <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-white"></div>
-                    <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-white"></div>
-                    <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-white"></div>
-                    <div className="w-full h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent absolute top-1/2 -translate-y-1/2 animate-pulse shadow-[0_0_8px_#34d399]"></div>
-                  </div>
-                </div>
-
-                <div className="absolute bottom-3 bg-black/70 backdrop-blur-xs text-white text-xs px-3 py-1 rounded-full font-medium flex items-center gap-1.5">
-                  <RefreshCw className="w-3 h-3 animate-spin text-emerald-400" />
-                  <span>Enfoca el código QR dentro del recuadro...</span>
-                </div>
-              </div>
-            )}
-
-            {/* Camera Warning / Stream Notice */}
-            {cameraNotice && (
-              <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-900 flex items-start gap-2.5 mb-3">
-                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <div className="flex-1 space-y-1">
-                  <p className="font-bold">Aviso de señal de la cámara</p>
-                  <p>{cameraNotice}</p>
-                  {videoDevices.length > 1 && (
-                    <p className="font-semibold text-indigo-700">
-                      💡 Consejo: Cambia la cámara en el desplegable superior a tu cámara web integrada o conecta tu móvil.
-                    </p>
+                  {/* Reintegro for Primitiva / Bonoloto */}
+                  {selectedGame !== 'euromillones' && (
+                    <span className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-100 text-amber-900 font-bold text-xs border border-amber-300">
+                      R: {keypadReintegro}
+                    </span>
                   )}
                 </div>
-              </div>
-            )}
 
-            {/* Camera / Upload Error Warning */}
-            {cameraError && (
-              <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2.5 mb-3 shadow-2xs">
-                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <div className="flex-1 space-y-2">
-                  <p className="font-bold text-amber-950">Aviso del lector de boletos</p>
-                  <p className="leading-relaxed text-slate-800">{cameraError}</p>
-                  <div>
-                    <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer shadow-xs active:scale-95 transition">
-                      <Camera className="w-3.5 h-3.5" />
-                      <span>📸 Tomar Foto al Boleto Ahora</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        onChange={handleFileUpload}
-                        className="hidden"
-                      />
-                    </label>
+                {/* Reintegro Selector for Primitiva & Bonoloto */}
+                {selectedGame !== 'euromillones' && (
+                  <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                    <span className="text-xs font-bold text-slate-700 mr-1">Reintegro:</span>
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {Array.from({ length: 10 }, (_, i) => i).map((r) => (
+                        <button
+                          key={`reintegro-${r}`}
+                          type="button"
+                          onClick={() => setKeypadReintegro(r)}
+                          className={`w-7 h-7 rounded-full text-xs font-bold transition cursor-pointer ${
+                            keypadReintegro === r
+                              ? 'bg-amber-500 text-white shadow-xs scale-105'
+                              : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-200'
+                          }`}
+                        >
+                          {r}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Number Grid: 1 to 49 (or 50) */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs text-slate-600 font-semibold px-0.5">
+                  <span>Números principales (1 al {selectedGame === 'euromillones' ? '50' : '49'}):</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleFillRandomKeypadNumbers}
+                      className="text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Dices className="w-3.5 h-3.5" />
+                      <span>Aleatorio</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleClearKeypadSelection}
+                      className="text-slate-500 hover:text-slate-800 font-medium cursor-pointer"
+                    >
+                      Limpiar
+                    </button>
                   </div>
                 </div>
-              </div>
-            )}
 
-            {/* Manual text / code input block */}
-            {isManualInputMode && (
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-2 mb-3">
-                <label className="font-bold text-slate-800 flex items-center gap-1">
-                  <Edit3 className="w-3.5 h-3.5 text-indigo-600" />
-                  Introduce el texto del QR o los números del boleto:
-                </label>
-                <textarea
-                  rows={3}
-                  value={manualInputText}
-                  onChange={(e) => setManualInputText(e.target.value)}
-                  placeholder="Ej: 03 04 12 23 37 48 R:8 o pega aquí la lectura de tu escáner"
-                  className="w-full p-2.5 rounded-lg border border-slate-300 font-mono text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                />
-                {/* Quick Presets */}
-                <div className="flex items-center gap-1.5 flex-wrap pt-1 text-[11px]">
-                  <span className="text-slate-500 font-medium">Boleto rápido:</span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setManualInputText(
-                        `LA PRIMITIVA - SELAE\n108 07 SEP 26 - 110 12 SEP 26\n1. 06 09 12 33 34 41\n2. 15 27 37 42 45 48\nREINTEGRO: 5\n42035-0 6,00 EUR`
-                      )
-                    }
-                    className="px-2 py-0.5 rounded bg-white border border-slate-300 text-indigo-700 font-semibold hover:bg-indigo-50 cursor-pointer"
-                  >
-                    Primitiva 3 Días (07-12 SEP, 2 apuestas)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setManualInputText(
-                        `BONOLOTO - SELAE\nMODALIDAD: SEMANAL (LUNES A DOMINGO)\n1. 03 04 12 23 37 48\n2. 07 18 25 31 40 49\nREINTEGRO: 8\n7,00 EUR`
-                      )
-                    }
-                    className="px-2 py-0.5 rounded bg-white border border-slate-300 text-blue-700 font-semibold hover:bg-blue-50 cursor-pointer"
-                  >
-                    Bonoloto Semanal (7 días)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setManualInputText(
-                        `EUROMILLONES - SELAE\nMODALIDAD: SEMANAL (MARTES Y VIERNES)\n1. 01 07 15 39 50 + 01 11\n2. 13 17 33 35 39 + 07 12\n10,00 EUR`
-                      )
-                    }
-                    className="px-2 py-0.5 rounded bg-white border border-slate-300 text-amber-700 font-semibold hover:bg-amber-50 cursor-pointer"
-                  >
-                    Euromillones Semanal (2 días)
-                  </button>
-                </div>
-                <div className="flex justify-end gap-2">
-                  <button
-                    onClick={() => setIsManualInputMode(false)}
-                    className="px-3 py-1 rounded-lg text-slate-600 font-medium hover:bg-slate-200"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={handleProcessManualInput}
-                    className="px-3.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold"
-                  >
-                    Procesar Boleto
-                  </button>
+                <div className="grid grid-cols-7 sm:grid-cols-10 gap-1.5 sm:gap-2 p-2 bg-slate-50 rounded-xl border border-slate-200">
+                  {Array.from(
+                    { length: selectedGame === 'euromillones' ? 50 : 49 },
+                    (_, i) => i + 1
+                  ).map((num) => {
+                    const isSelected = keypadNumbers.includes(num);
+                    return (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => handleToggleKeypadNumber(num)}
+                        className={`h-9 sm:h-10 rounded-xl font-bold text-xs sm:text-sm transition flex items-center justify-center cursor-pointer active:scale-95 select-none ${
+                          isSelected
+                            ? selectedGame === 'primitiva'
+                              ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-400'
+                              : selectedGame === 'bonoloto'
+                              ? 'bg-blue-600 text-white shadow-sm ring-2 ring-blue-400'
+                              : 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-400'
+                            : 'bg-white text-slate-800 hover:bg-slate-200 border border-slate-200 shadow-2xs'
+                        }`}
+                      >
+                        {num}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
-            )}
 
-            {/* Official SELAE Notice & Direct Verification Button */}
-            <div className="p-3.5 bg-blue-50/80 border border-blue-200/80 rounded-xl text-xs text-blue-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-start gap-2.5">
-                <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                <div className="space-y-0.5">
-                  <p className="font-bold text-blue-900">
-                    Comprobación Oficial de Loterías y Apuestas del Estado (SELAE)
-                  </p>
-                  <p className="text-blue-800/90 text-[11px] leading-relaxed">
-                    Si tu resguardo físico tiene un código QR oficial con número de serie cifrado, también puedes validarlo al instante en el portal oficial de Loterías con el botón directo:
-                  </p>
+              {/* Stars Grid for Euromillones */}
+              {selectedGame === 'euromillones' && (
+                <div className="space-y-1.5 pt-1">
+                  <span className="text-xs text-amber-900 font-bold px-0.5">
+                    Estrellas (selecciona 2 de 12):
+                  </span>
+                  <div className="grid grid-cols-6 sm:grid-cols-12 gap-1.5 p-2 bg-amber-50/50 rounded-xl border border-amber-200">
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map((star) => {
+                      const isSelected = keypadStars.includes(star);
+                      return (
+                        <button
+                          key={`star-btn-${star}`}
+                          type="button"
+                          onClick={() => handleToggleKeypadStar(star)}
+                          className={`h-9 rounded-xl font-black text-xs transition flex items-center justify-center cursor-pointer active:scale-95 select-none ${
+                            isSelected
+                              ? 'bg-amber-400 text-slate-950 shadow-xs ring-2 ring-amber-500 scale-105'
+                              : 'bg-white text-slate-700 hover:bg-amber-100 border border-amber-200'
+                          }`}
+                        >
+                          ★{star}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
+              )}
+
+              {/* Already Added Bets List (if multi-bet) */}
+              {keypadBetsList.length > 0 && (
+                <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2 text-xs">
+                  <span className="font-bold text-indigo-950">
+                    Apuestas preparadas ({keypadBetsList.length}):
+                  </span>
+                  <div className="space-y-1.5">
+                    {keypadBetsList.map((bet, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between p-2 bg-white rounded-lg border border-indigo-100 shadow-2xs"
+                      >
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-black text-indigo-900 w-5">#{idx + 1}</span>
+                          <span className="font-bold text-slate-800">
+                            {bet.numbers.join(', ')}
+                          </span>
+                          {bet.stars && (
+                            <span className="font-extrabold text-amber-700">
+                              ★{bet.stars.join(', ')}
+                            </span>
+                          )}
+                          {bet.reintegro !== undefined && (
+                            <span className="text-[11px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded">
+                              R:{bet.reintegro}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveKeypadBet(idx)}
+                          className="p-1 text-rose-600 hover:bg-rose-50 rounded cursor-pointer"
+                          title="Eliminar apuesta"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Bottom Action Bar for Keypad */}
+              <div className="flex items-center justify-between gap-2 flex-wrap pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={handleAddKeypadBet}
+                  disabled={
+                    keypadNumbers.length !== (selectedGame === 'euromillones' ? 5 : 6) ||
+                    (selectedGame === 'euromillones' && keypadStars.length !== 2)
+                  }
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed text-slate-800 font-bold text-xs border border-slate-300 transition cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Añadir otra columna / apuesta</span>
+                </button>
+
+                <button
+                  type="button"
+                  id="check-keypad-ticket-btn"
+                  onClick={handleCheckKeypadTicket}
+                  disabled={
+                    keypadBetsList.length === 0 &&
+                    (keypadNumbers.length !== (selectedGame === 'euromillones' ? 5 : 6) ||
+                      (selectedGame === 'euromillones' && keypadStars.length !== 2))
+                  }
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black text-xs sm:text-sm shadow-md transition cursor-pointer active:scale-95 ml-auto"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+                  <span>
+                    Comprobar Boleto Ahora
+                    {keypadBetsList.length > 0 || keypadNumbers.length === (selectedGame === 'euromillones' ? 5 : 6)
+                      ? ` (${keypadBetsList.length + (keypadNumbers.length === (selectedGame === 'euromillones' ? 5 : 6) ? 1 : 0)} ap.)`
+                      : ''}
+                  </span>
+                </button>
               </div>
-              <a
-                href={`https://www.loteriasyapuestas.es/es/${
-                  selectedGame === 'primitiva'
-                    ? 'la-primitiva'
-                    : selectedGame === 'bonoloto'
-                    ? 'bonoloto'
-                    : 'euromillones'
-                }/comprobar`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs shrink-0 self-start sm:self-center"
-              >
-                <span>Web Oficial SELAE</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
             </div>
+          )}
+
+          {/* TAB 3: TEXT / COPY PASTE MANUAL INPUT */}
+          {activeMode === 'manual' && (
+            <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-3 text-xs">
+              <label className="font-bold text-slate-800 flex items-center gap-1.5 text-sm">
+                <Edit3 className="w-4 h-4 text-indigo-600" />
+                Introduce los números o el texto del código QR:
+              </label>
+              <textarea
+                rows={4}
+                value={manualInputText}
+                onChange={(e) => setManualInputText(e.target.value)}
+                placeholder="Ejemplo: 03 04 12 23 37 48 R:8 o pega aquí la lectura de tu escáner"
+                className="w-full p-2.5 rounded-xl border border-slate-300 font-mono text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+              
+              {/* Quick Presets */}
+              <div className="flex items-center gap-1.5 flex-wrap pt-1 text-[11px]">
+                <span className="text-slate-500 font-medium">Boleto rápido:</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setManualInputText(
+                      `LA PRIMITIVA - SELAE\n108 07 SEP 26 - 110 12 SEP 26\n1. 06 09 12 33 34 41\n2. 15 27 37 42 45 48\nREINTEGRO: 5\n42035-0 6,00 EUR`
+                    )
+                  }
+                  className="px-2 py-0.5 rounded bg-slate-100 hover:bg-indigo-50 text-indigo-700 font-semibold border border-slate-200 cursor-pointer"
+                >
+                  Primitiva 3 Días (2 apuestas)
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setManualInputText(
+                      `BONOLOTO - SELAE\nMODALIDAD: SEMANAL (LUNES A DOMINGO)\n1. 03 04 12 23 37 48\n2. 07 18 25 31 40 49\nREINTEGRO: 8\n7,00 EUR`
+                    )
+                  }
+                  className="px-2 py-0.5 rounded bg-slate-100 hover:bg-blue-50 text-blue-700 font-semibold border border-slate-200 cursor-pointer"
+                >
+                  Bonoloto Semanal (7 días)
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setManualInputText(
+                      `EUROMILLONES - SELAE\nMODALIDAD: SEMANAL (MARTES Y VIERNES)\n1. 01 07 15 39 50 + 01 11\n2. 13 17 33 35 39 + 07 12\n10,00 EUR`
+                    )
+                  }
+                  className="px-2 py-0.5 rounded bg-slate-100 hover:bg-amber-50 text-amber-800 font-semibold border border-slate-200 cursor-pointer"
+                >
+                  Euromillones Semanal
+                </button>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setActiveMode('scanner')}
+                  className="px-3 py-1.5 rounded-lg text-slate-600 font-medium hover:bg-slate-200 cursor-pointer"
+                >
+                  Volver al Escáner
+                </button>
+                <button
+                  type="button"
+                  onClick={handleProcessManualInput}
+                  className="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold cursor-pointer shadow-xs"
+                >
+                  Procesar Boleto
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Official SELAE Notice & Mobile Guidance */}
+          <div className="p-3.5 bg-blue-50/80 border border-blue-200/80 rounded-xl text-xs text-blue-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <p className="font-bold text-blue-900">
+                  Comprobación Oficial de Loterías y Apuestas del Estado (SELAE)
+                </p>
+                <p className="text-blue-800/90 text-[11px] leading-relaxed">
+                  Si tu resguardo físico tiene un código QR oficial con número de serie cifrado, también puedes validarlo en el portal oficial con el botón directo:
+                </p>
+              </div>
+            </div>
+            <a
+              href={`https://www.loteriasyapuestas.es/es/${
+                selectedGame === 'primitiva'
+                  ? 'la-primitiva'
+                  : selectedGame === 'bonoloto'
+                  ? 'bonoloto'
+                  : 'euromillones'
+              }/comprobar`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs shrink-0 self-start sm:self-center"
+            >
+              <span>Web Oficial SELAE</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
           </div>
 
           {/* Results Display Section */}
