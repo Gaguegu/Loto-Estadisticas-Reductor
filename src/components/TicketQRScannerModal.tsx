@@ -82,8 +82,8 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
   const [isEditingBets, setIsEditingBets] = useState<boolean>(false);
   const [editBetsText, setEditBetsText] = useState<string>('');
 
-  // Primary interaction mode: 'scanner' (camera/file/gallery), 'keypad' (touch number selection), 'manual' (text/paste)
-  const [activeMode, setActiveMode] = useState<'scanner' | 'keypad' | 'manual'>('scanner');
+  // Primary interaction mode: 'keypad' (touch number selection), 'scanner' (camera/file/gallery), 'manual' (text/paste)
+  const [activeMode, setActiveMode] = useState<'scanner' | 'keypad' | 'manual'>('keypad');
   const [keypadNumbers, setKeypadNumbers] = useState<number[]>([]);
   const [keypadStars, setKeypadStars] = useState<number[]>([]);
   const [keypadReintegro, setKeypadReintegro] = useState<number>(0);
@@ -144,6 +144,7 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
       setScrutinyResult(null);
       setMultiDrawResult(null);
       setActiveTabDayId('all');
+      setActiveMode('keypad');
       enumerateCameras();
     } else {
       stopCamera();
@@ -702,6 +703,34 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
     }
   };
 
+  // Modify current numbers: returns to keypad with existing numbers pre-loaded
+  const handleModifyCurrentNumbers = () => {
+    if (parsedTicket && parsedTicket.bets.length > 0) {
+      const firstBet = parsedTicket.bets[0];
+      setKeypadNumbers([...firstBet.numbers]);
+      setKeypadStars(firstBet.stars ? [...firstBet.stars] : []);
+      if (firstBet.reintegro !== undefined) {
+        setKeypadReintegro(firstBet.reintegro);
+      }
+      if (parsedTicket.bets.length > 1) {
+        setKeypadBetsList(
+          parsedTicket.bets.slice(1).map((b) => ({
+            numbers: b.numbers,
+            stars: b.stars,
+            reintegro: b.reintegro,
+          }))
+        );
+      } else {
+        setKeypadBetsList([]);
+      }
+    }
+    setParsedTicket(null);
+    setActiveMode('keypad');
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
   // Clear current ticket without automatically opening camera
   const handleClearCurrentTicket = () => {
     setParsedTicket(null);
@@ -986,9 +1015,30 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
         <div className="bg-slate-100/90 border-b border-slate-200 px-3 sm:px-5 py-1.5 flex items-center gap-1.5 sm:gap-2 overflow-x-auto shrink-0">
           <button
             type="button"
-            onClick={() => setActiveMode('scanner')}
+            onClick={() => {
+              if (parsedTicket) setParsedTicket(null);
+              setActiveMode('keypad');
+            }}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer ${
-              activeMode === 'scanner'
+              activeMode === 'keypad' && !parsedTicket
+                ? 'bg-white text-indigo-950 shadow-xs border border-slate-300'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
+            }`}
+          >
+            <Grid3X3 className="w-3.5 h-3.5 text-indigo-600" />
+            <span>✍️ Teclado Táctil</span>
+            <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 ml-1">
+              Recomendado
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (parsedTicket) setParsedTicket(null);
+              setActiveMode('scanner');
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+              activeMode === 'scanner' && !parsedTicket
                 ? 'bg-white text-indigo-950 shadow-xs border border-slate-300'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
             }`}
@@ -998,31 +1048,26 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
           </button>
           <button
             type="button"
-            onClick={() => setActiveMode('keypad')}
+            onClick={() => {
+              if (parsedTicket) setParsedTicket(null);
+              setActiveMode('manual');
+            }}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer ${
-              activeMode === 'keypad'
-                ? 'bg-white text-indigo-950 shadow-xs border border-slate-300'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
-            }`}
-          >
-            <Grid3X3 className="w-3.5 h-3.5 text-indigo-600" />
-            <span>✍️ Teclado Táctil</span>
-            <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 ml-1">
-              100% Funcional
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveMode('manual')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer ${
-              activeMode === 'manual'
+              activeMode === 'manual' && !parsedTicket
                 ? 'bg-white text-indigo-950 shadow-xs border border-slate-300'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
             }`}
           >
             <Edit3 className="w-3.5 h-3.5 text-slate-600" />
-            <span>📋 Texto / Copiar Pegar</span>
+            <span>📋 Pegar Texto</span>
           </button>
+
+          {parsedTicket && (
+            <span className="ml-auto text-[11px] font-bold text-emerald-800 bg-emerald-100/90 border border-emerald-300 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shrink-0">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Resultados Mostrados</span>
+            </span>
+          )}
         </div>
 
         {/* Hidden inputs to trigger mobile camera intent or gallery picker */}
@@ -1048,7 +1093,7 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
         <div ref={scrollContainerRef} className="p-3 sm:p-5 overflow-y-auto flex-1 space-y-4 bg-slate-100/50">
           
           {/* TAB 1: SCANNER & PHOTO INPUT */}
-          {activeMode === 'scanner' && (
+          {!parsedTicket && activeMode === 'scanner' && (
             <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
@@ -1077,10 +1122,9 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
               {/* Action Buttons: 2 Big Mobile-Friendly Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 {/* Primary Button: Mobile Camera Intent */}
-                <button
-                  type="button"
+                <label
+                  htmlFor="qr-camera-direct-input"
                   id="mobile-camera-capture-trigger"
-                  onClick={handleOpenCameraCapture}
                   className="flex items-center gap-3 p-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-sm transition active:scale-98 text-left cursor-pointer border border-emerald-500/50 group"
                 >
                   <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
@@ -1095,13 +1139,12 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
                       Abre la cámara de tu teléfono al instante para enfocar el resguardo
                     </p>
                   </div>
-                </button>
+                </label>
 
                 {/* Secondary Button: Gallery Picker */}
-                <button
-                  type="button"
+                <label
+                  htmlFor="qr-gallery-direct-input"
                   id="gallery-file-picker-trigger"
-                  onClick={handleOpenGalleryPicker}
                   className="flex items-center gap-3 p-3.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-300 shadow-2xs transition active:scale-98 text-left cursor-pointer group"
                 >
                   <div className="w-11 h-11 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
@@ -1115,7 +1158,7 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
                       Selecciona una foto ya guardada en tu teléfono o archivo de tu PC
                     </p>
                   </div>
-                </button>
+                </label>
               </div>
 
               {/* Secondary Actions Bar */}
@@ -1273,28 +1316,29 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
                     <div className="flex items-center gap-2 flex-wrap pt-1">
                       <button
                         type="button"
-                        onClick={() => setActiveMode('keypad')}
+                        onClick={() => {
+                          setCameraError(null);
+                          setActiveMode('keypad');
+                        }}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs cursor-pointer shadow-xs active:scale-95 transition"
                       >
                         <Grid3X3 className="w-3.5 h-3.5" />
-                        <span>✍️ Usar Teclado Táctil</span>
+                        <span>✍️ Usar Teclado Táctil (Recomendado)</span>
                       </button>
-                      <button
-                        type="button"
-                        onClick={handleOpenGalleryPicker}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 font-bold text-xs cursor-pointer shadow-2xs active:scale-95 transition"
-                      >
-                        <ImageIcon className="w-3.5 h-3.5 text-indigo-600" />
-                        <span>🖼️ Elegir de la Galería</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleOpenCameraCapture}
+                      <label
+                        htmlFor="qr-camera-direct-input"
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer shadow-xs active:scale-95 transition"
                       >
                         <Camera className="w-3.5 h-3.5" />
                         <span>📸 Hacer Foto</span>
-                      </button>
+                      </label>
+                      <label
+                        htmlFor="qr-gallery-direct-input"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 font-bold text-xs cursor-pointer shadow-2xs active:scale-95 transition"
+                      >
+                        <ImageIcon className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>🖼️ Galería</span>
+                      </label>
                     </div>
                   </div>
                 </div>
@@ -1303,7 +1347,7 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
           )}
 
           {/* TAB 2: INTERACTIVE TOUCH KEYPAD (Zero permissions needed, 100% reliable on all phones) */}
-          {activeMode === 'keypad' && (
+          {!parsedTicket && activeMode === 'keypad' && (
             <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
                 <div>
@@ -1559,45 +1603,69 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
               )}
 
               {/* Bottom Action Bar for Keypad */}
-              <div className="flex items-center justify-between gap-2 flex-wrap pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={handleAddKeypadBet}
-                  disabled={
-                    keypadNumbers.length !== (selectedGame === 'euromillones' ? 5 : 6) ||
-                    (selectedGame === 'euromillones' && keypadStars.length !== 2)
-                  }
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed text-slate-800 font-bold text-xs border border-slate-300 transition cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Añadir otra columna / apuesta</span>
-                </button>
+              <div className="space-y-2 pt-2 border-t border-slate-100">
+                {keypadNumbers.length < (selectedGame === 'euromillones' ? 5 : 6) && keypadBetsList.length === 0 && (
+                  <p className="text-[11px] text-indigo-700 font-semibold text-center">
+                    💡 Marca {(selectedGame === 'euromillones' ? 5 : 6) - keypadNumbers.length} número{(selectedGame === 'euromillones' ? 5 : 6) - keypadNumbers.length === 1 ? '' : 's'} en la cuadrícula para comprobar (o pulsa «Aleatorio»)
+                  </p>
+                )}
+                {selectedGame === 'euromillones' && keypadNumbers.length === 5 && keypadStars.length < 2 && (
+                  <p className="text-[11px] text-amber-800 font-semibold text-center">
+                    ⭐ Marca {2 - keypadStars.length} estrella{2 - keypadStars.length === 1 ? '' : 's'} más para completar
+                  </p>
+                )}
 
-                <button
-                  type="button"
-                  id="check-keypad-ticket-btn"
-                  onClick={handleCheckKeypadTicket}
-                  disabled={
-                    keypadBetsList.length === 0 &&
-                    (keypadNumbers.length !== (selectedGame === 'euromillones' ? 5 : 6) ||
-                      (selectedGame === 'euromillones' && keypadStars.length !== 2))
-                  }
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black text-xs sm:text-sm shadow-md transition cursor-pointer active:scale-95 ml-auto"
-                >
-                  <CheckCircle2 className="w-4 h-4 text-emerald-200" />
-                  <span>
-                    Comprobar Boleto Ahora
-                    {keypadBetsList.length > 0 || keypadNumbers.length === (selectedGame === 'euromillones' ? 5 : 6)
-                      ? ` (${keypadBetsList.length + (keypadNumbers.length === (selectedGame === 'euromillones' ? 5 : 6) ? 1 : 0)} ap.)`
-                      : ''}
-                  </span>
-                </button>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={handleAddKeypadBet}
+                      disabled={
+                        keypadNumbers.length !== (selectedGame === 'euromillones' ? 5 : 6) ||
+                        (selectedGame === 'euromillones' && keypadStars.length !== 2)
+                      }
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed text-slate-800 font-bold text-xs border border-slate-300 transition cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Añadir otra apuesta</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleFillRandomKeypadNumbers}
+                      className="inline-flex items-center gap-1 px-2.5 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs border border-indigo-200 transition cursor-pointer"
+                      title="Rellenar combinación de prueba al azar"
+                    >
+                      <Dices className="w-3.5 h-3.5" />
+                      <span>Aleatorio</span>
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    id="check-keypad-ticket-btn"
+                    onClick={handleCheckKeypadTicket}
+                    disabled={
+                      keypadBetsList.length === 0 &&
+                      (keypadNumbers.length !== (selectedGame === 'euromillones' ? 5 : 6) ||
+                        (selectedGame === 'euromillones' && keypadStars.length !== 2))
+                    }
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black text-xs sm:text-sm shadow-md transition cursor-pointer active:scale-95 ml-auto"
+                  >
+                    <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+                    <span>
+                      Comprobar Boleto Ahora
+                      {keypadBetsList.length > 0 || keypadNumbers.length === (selectedGame === 'euromillones' ? 5 : 6)
+                        ? ` (${keypadBetsList.length + (keypadNumbers.length === (selectedGame === 'euromillones' ? 5 : 6) ? 1 : 0)} ap.)`
+                        : ''}
+                    </span>
+                  </button>
+                </div>
               </div>
             </div>
           )}
 
           {/* TAB 3: TEXT / COPY PASTE MANUAL INPUT */}
-          {activeMode === 'manual' && (
+          {!parsedTicket && activeMode === 'manual' && (
             <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-3 text-xs">
               <label className="font-bold text-slate-800 flex items-center gap-1.5 text-sm">
                 <Edit3 className="w-4 h-4 text-indigo-600" />
@@ -1669,38 +1737,70 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
           )}
 
           {/* Official SELAE Notice & Mobile Guidance */}
-          <div className="p-3.5 bg-blue-50/80 border border-blue-200/80 rounded-xl text-xs text-blue-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-start gap-2.5">
-              <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-              <div className="space-y-0.5">
-                <p className="font-bold text-blue-900">
-                  Comprobación Oficial de Loterías y Apuestas del Estado (SELAE)
-                </p>
-                <p className="text-blue-800/90 text-[11px] leading-relaxed">
-                  Si tu resguardo físico tiene un código QR oficial con número de serie cifrado, también puedes validarlo en el portal oficial con el botón directo:
-                </p>
+          {!parsedTicket && (
+            <div className="p-3.5 bg-blue-50/80 border border-blue-200/80 rounded-xl text-xs text-blue-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <p className="font-bold text-blue-900">
+                    Comprobación Oficial de Loterías y Apuestas del Estado (SELAE)
+                  </p>
+                  <p className="text-blue-800/90 text-[11px] leading-relaxed">
+                    Si tu resguardo físico tiene un código QR oficial con número de serie cifrado, también puedes validarlo en el portal oficial con el botón directo:
+                  </p>
+                </div>
               </div>
+              <a
+                href={`https://www.loteriasyapuestas.es/es/${
+                  selectedGame === 'primitiva'
+                    ? 'la-primitiva'
+                    : selectedGame === 'bonoloto'
+                    ? 'bonoloto'
+                    : 'euromillones'
+                }/comprobar`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs shrink-0 self-start sm:self-center"
+              >
+                <span>Web Oficial SELAE</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
             </div>
-            <a
-              href={`https://www.loteriasyapuestas.es/es/${
-                selectedGame === 'primitiva'
-                  ? 'la-primitiva'
-                  : selectedGame === 'bonoloto'
-                  ? 'bonoloto'
-                  : 'euromillones'
-              }/comprobar`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs shrink-0 self-start sm:self-center"
-            >
-              <span>Web Oficial SELAE</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
-          </div>
+          )}
 
           {/* Results Display Section */}
           {parsedTicket && (
             <div className="space-y-4">
+              {/* Quick actions top bar */}
+              <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3 sm:p-4 flex items-center justify-between gap-2.5 flex-wrap shadow-2xs">
+                <div className="flex items-center gap-2.5">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                  <div>
+                    <p className="font-bold text-xs sm:text-sm text-emerald-950">Boleto Comprobado con Éxito</p>
+                    <p className="text-[11px] text-emerald-800">
+                      Aciertos y categorías escrutados con los datos oficiales
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap ml-auto">
+                  <button
+                    type="button"
+                    onClick={handleModifyCurrentNumbers}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 text-xs font-bold shadow-2xs cursor-pointer active:scale-95 transition"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Modificar Números</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleScanAnotherTicket}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-xs cursor-pointer active:scale-95 transition"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Comprobar Otro Boleto</span>
+                  </button>
+                </div>
+              </div>
               {/* Ticket Overview Card */}
               <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-xs">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
@@ -2667,23 +2767,25 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
           )}
 
           {/* User Guide Card */}
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs space-y-2">
-            <h4 className="font-bold text-slate-800 flex items-center gap-1.5">
-              <HelpCircle className="w-4 h-4 text-indigo-600" />
-              ¿Cómo funciona el lector de códigos de Loterías y Apuestas?
-            </h4>
-            <ul className="list-disc list-inside space-y-1 text-slate-600 leading-relaxed">
-              <li>
-                <strong>Cámara en vivo</strong>: Enciende la cámara y sitúa el resguardo impreso bajo buena iluminación. El lector detecta automáticamente cualquier QR o texto de apuesta.
-              </li>
-              <li>
-                <strong>Subir fotografía</strong>: Si estás con el móvil, puedes hacer una foto directa de tu resguardo y seleccionarla para analizarla sin activar el vídeo en directo.
-              </li>
-              <li>
-                <strong>Códigos cifrados oficiales</strong>: SELAE protege los resguardos con un cifrado exclusivo de la red oficial de terminales para evitar duplicidades. Si tu código QR contiene el enlace cifrado oficial, la aplicación te proporciona el botón directo a la validación de SELAE y además te permite verificar los números automáticamente.
-              </li>
-            </ul>
-          </div>
+          {!parsedTicket && (
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs space-y-2">
+              <h4 className="font-bold text-slate-800 flex items-center gap-1.5">
+                <HelpCircle className="w-4 h-4 text-indigo-600" />
+                ¿Cómo comprobar boletos y resguardos de Loterías y Apuestas?
+              </h4>
+              <ul className="list-disc list-inside space-y-1 text-slate-600 leading-relaxed">
+                <li>
+                  <strong>✍️ Teclado Táctil (Recomendado)</strong>: Pulsa directamente sobre los números de tu boleto. Funciona en el 100% de los teléfonos, sin necesidad de permisos de cámara ni problemas de enfoque o reflejos.
+                </li>
+                <li>
+                  <strong>📸 Hacer foto / Galería</strong>: Si prefieres la cámara, pulsa en "Hacer Foto" para abrir la cámara de tu móvil o selecciona una imagen de tu galería.
+                </li>
+                <li>
+                  <strong>Códigos cifrados oficiales SELAE</strong>: Si tu resguardo físico tiene un código QR oficial con número de serie cifrado de terminal, la aplicación te proporciona el botón directo para validarlo al instante en el portal oficial de SELAE.
+                </li>
+              </ul>
+            </div>
+          )}
         </div>
 
         {/* Modal Footer */}
@@ -2698,8 +2800,8 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
                 onClick={handleScanAnotherTicket}
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold transition shadow-xs cursor-pointer active:scale-95"
               >
-                <QrCode className="w-3.5 h-3.5" />
-                <span>Escanear Otro Boleto</span>
+                <Plus className="w-3.5 h-3.5" />
+                <span>Comprobar Otro Boleto</span>
               </button>
             )}
             <button
@@ -2709,7 +2811,7 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
               }}
               className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition cursor-pointer"
             >
-              Cerrar Lector
+              Cerrar
             </button>
           </div>
         </div>
