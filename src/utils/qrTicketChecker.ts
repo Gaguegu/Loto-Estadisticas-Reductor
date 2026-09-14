@@ -13,6 +13,10 @@ export interface ParsedTicketData {
   raw: string;
   game: GameType;
   date?: string; // YYYY-MM-DD if extracted or inferred
+  startDate?: string;
+  endDate?: string;
+  drawStart?: number;
+  drawEnd?: number;
   drawNumber?: string;
   reintegro?: number;
   joker?: string;
@@ -21,6 +25,7 @@ export interface ParsedTicketData {
   isOfficialSELAECode: boolean;
   notes?: string;
   ticketScope?: TicketScope; // 'single' (1 sorteo diario) or 'weekly' (multisorteo semanal)
+  priceEur?: number;
 }
 
 export interface BetScrutinyResult {
@@ -83,6 +88,33 @@ export const OFFICIAL_PRIZE_ESTIMATES: Record<GameType, Record<string, number>> 
   },
 };
 
+const SPANISH_MONTHS: Record<string, string> = {
+  ENE: '01', ENERO: '01',
+  FEB: '02', FEBRERO: '02',
+  MAR: '03', MARZO: '03',
+  ABR: '04', ABRIL: '04',
+  MAY: '05', MAYO: '05',
+  JUN: '06', JUNIO: '06',
+  JUL: '07', JULIO: '07',
+  AGO: '08', AGOSTO: '08',
+  SEP: '09', SEPTIEMBRE: '09', SETIEMBRE: '09',
+  OCT: '10', OCTUBRE: '10',
+  NOV: '11', NOVIEMBRE: '11',
+  DIC: '12', DICIEMBRE: '12',
+};
+
+function formatIsoDate(day: string, monthOrName: string, year: string): string {
+  const y = year.length === 2 ? `20${year}` : year;
+  let m = monthOrName.toUpperCase();
+  if (SPANISH_MONTHS[m]) {
+    m = SPANISH_MONTHS[m];
+  } else {
+    m = m.padStart(2, '0');
+  }
+  const d = day.padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 /**
  * Parses the raw text read from a QR code or barcode on a lottery slip.
  * Handles official SELAE format strings, query parameters, or plain list formats.
@@ -92,10 +124,16 @@ export function parseTicketQR(qrText: string, defaultGame: GameType = 'primitiva
   let detectedGame: GameType = defaultGame;
   let reintegro: number | undefined = undefined;
   let date: string | undefined = undefined;
+  let startDate: string | undefined = undefined;
+  let endDate: string | undefined = undefined;
+  let drawStart: number | undefined = undefined;
+  let drawEnd: number | undefined = undefined;
   let drawNumber: string | undefined = undefined;
   let ticketCode: string | undefined = undefined;
+  let priceEur: number | undefined = undefined;
   const bets: ScannedBet[] = [];
   let isOfficialSELAECode = false;
+  let ticketScope: TicketScope = 'single';
 
   const lower = trimmed.toLowerCase();
 
@@ -108,36 +146,118 @@ export function parseTicketQR(qrText: string, defaultGame: GameType = 'primitiva
     detectedGame = 'primitiva';
   }
 
-  // Check if it's a URL or query string like ?A=... or &R=...
-  if (trimmed.includes('loteriasyapuestas.es') || trimmed.includes('selae') || /^[A-Z0-9]{15,40}$/i.test(trimmed)) {
+  // Check if it's an official SELAE receipt / QR code / terminal serial
+  // Official barcodes look like: 13218-0102-09354-20397-01769-54895-46458
+  // or QR code content: 01-13218-E37703CAB8E1B120EF64
+  if (
+    trimmed.includes('loteriasyapuestas.es') ||
+    trimmed.includes('selae') ||
+    /^\d{5}-\d{4}-\d{5}/.test(trimmed) ||
+    /^\d{2}-\d{5}-[A-Z0-9]+/i.test(trimmed) ||
+    /^[A-Z0-9]{15,40}$/i.test(trimmed)
+  ) {
     isOfficialSELAECode = true;
     ticketCode = trimmed;
+    // For official SELAE receipts where bets are encrypted in the QR, default to weekly
+    // so that multi-day abonos are evaluated across all available days in the week
+    ticketScope = 'weekly';
   }
 
-  // Extract date if present (YYYY-MM-DD or DD/MM/YYYY or DD-MM-YYYY)
-  const dateMatch = trimmed.match(/(\d{4})[/-](\d{2})[/-](\d{2})/) || trimmed.match(/(\d{2})[/-](\d{2})[/-](\d{4})/);
-  if (dateMatch) {
-    if (dateMatch[1].length === 4) {
-      date = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`;
-    } else {
-      date = `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`;
+  // 1. Detect Draw Range + Spanish Dates (e.g. "108 07 SEP 26 - 110 12 SEP 26")
+  const drawRangeMatch = trimmed.match(
+    /(\d+)\s+(\d{1,2})\s+([A-Za-z]{3,10})\s+(\d{2,4})\s*-\s*(\d+)\s+(\d{1,2})\s+([A-Za-z]{3,10})\s+(\d{2,4})/
+  );
+  if (drawRangeMatch) {
+    drawStart = parseInt(drawRangeMatch[1], 10);
+    startDate = formatIsoDate(drawRangeMatch[2], drawRangeMatch[3], drawRangeMatch[4]);
+    drawEnd = parseInt(drawRangeMatch[5], 10);
+    endDate = formatIsoDate(drawRangeMatch[6], drawRangeMatch[7], drawRangeMatch[8]);
+    date = endDate;
+    if (drawEnd > drawStart || startDate !== endDate) {
+      ticketScope = 'weekly';
     }
   }
 
-  // Extract reintegro if present (R=5 or R:5 or Reintegro: 5)
+  // 2. Detect Date Range without draw numbers (e.g. "07 SEP 26 - 12 SEP 26" or "07/09/2026 - 12/09/2026")
+  if (!startDate) {
+    const textDateRange = trimmed.match(
+      /(\d{1,2})\s+([A-Za-z]{3,10})\s+(\d{2,4})\s*(?:-|a|al|hasta)\s*(\d{1,2})\s+([A-Za-z]{3,10})\s+(\d{2,4})/i
+    );
+    if (textDateRange) {
+      startDate = formatIsoDate(textDateRange[1], textDateRange[2], textDateRange[3]);
+      endDate = formatIsoDate(textDateRange[4], textDateRange[5], textDateRange[6]);
+      date = endDate;
+      ticketScope = 'weekly';
+    }
+  }
+
+  if (!startDate) {
+    const numDateRange = trimmed.match(
+      /(\d{2})[/-](\d{2})[/-](\d{2,4})\s*(?:-|a|al|hasta)\s*(\d{2})[/-](\d{2})[/-](\d{2,4})/
+    );
+    if (numDateRange) {
+      startDate = formatIsoDate(numDateRange[1], numDateRange[2], numDateRange[3]);
+      endDate = formatIsoDate(numDateRange[4], numDateRange[5], numDateRange[6]);
+      date = endDate;
+      ticketScope = 'weekly';
+    }
+  }
+
+  // 3. Detect Single Spanish Date (e.g. "12 SEP 26" or "07 SEP 2026")
+  if (!date) {
+    const spanishSingleDate = trimmed.match(/(\d{1,2})\s+([A-Za-z]{3,10})\s+(\d{2,4})/);
+    if (spanishSingleDate) {
+      date = formatIsoDate(spanishSingleDate[1], spanishSingleDate[2], spanishSingleDate[3]);
+    }
+  }
+
+  // 4. Detect Single Standard Date (YYYY-MM-DD or DD/MM/YYYY)
+  if (!date) {
+    const dateMatch = trimmed.match(/(\d{4})[/-](\d{2})[/-](\d{2})/) || trimmed.match(/(\d{2})[/-](\d{2})[/-](\d{4})/);
+    if (dateMatch) {
+      if (dateMatch[1].length === 4) {
+        date = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`;
+      } else {
+        date = `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`;
+      }
+    }
+  }
+
+  // 5. Detect Price in EUR (e.g. "6,00 EUR" or "3,00 EUR")
+  const priceMatch = trimmed.match(/(\d+[.,]\d{2})\s*(?:EUR|€)/i);
+  if (priceMatch) {
+    priceEur = parseFloat(priceMatch[1].replace(',', '.'));
+    // In Primitiva: 1 bet for 3 days = 3€, 2 bets for 3 days = 6€, 3 bets = 9€
+    if (detectedGame === 'primitiva' && (priceEur === 3 || priceEur === 6 || priceEur === 9 || priceEur === 12)) {
+      ticketScope = 'weekly';
+    }
+  }
+
+  // 6. Detect Reintegro if present (R=5 or R:5 or Reintegro: 5 or REINTEGRO: 5)
   const rMatch = trimmed.match(/(?:R|REINTEGRO)[=:\s]+(\d)/i);
   if (rMatch) {
     reintegro = parseInt(rMatch[1], 10);
   }
 
-  // Look for structured lines or blocks of numbers:
-  // e.g., "A: 03 12 24 35 44 49" or "1: 03-12-24-35-44-49"
-  // or "5 12 23 34 45 + 2 9"
+  // 7. Extract Bets from Lines
+  // A bet consists of numbers, but lines may begin with "1.", "2.", "A:", "Apuesta 1:", etc.
+  // We MUST strip leading bet indicators so the index number is never confused with a lottery number!
   const lines = trimmed.split(/[\r\n;,|]+/);
 
   for (const line of lines) {
-    const cleanLine = line.trim();
+    let cleanLine = line.trim();
     if (!cleanLine) continue;
+
+    // Ignore lines that are header/meta information
+    if (/^(?:la\s+)?primitiva|bonoloto|euromillones|selae|loterias|reintegro|joker|total|terminal|precio|importe/i.test(cleanLine)) {
+      // Check if this line happens to contain bets as well
+      if (!/\b\d{1,2}\s+\d{1,2}\s+\d{1,2}\s+\d{1,2}\s+\d{1,2}\b/.test(cleanLine)) {
+        continue;
+      }
+    }
+
+    // Strip leading bet indices: "1.", "2)", "A:", "Apuesta 1:", "1 -", etc.
+    cleanLine = cleanLine.replace(/^\s*(?:(?:apuesta\s*)?[a-h\d]{1,2}[\.\)\-:]\s*)/i, '');
 
     // Check for stars separated by * or + or ★
     let numbersPart = cleanLine;
@@ -228,9 +348,12 @@ export function parseTicketQR(qrText: string, defaultGame: GameType = 'primitiva
     }
   }
 
-  // Check if ticket specifies weekly participation
-  let ticketScope: TicketScope = 'single';
-  if (/semanal|semana|abono|multisorteo|3\s*sorteos|2\s*sorteos|sem\.|3\s*d[ií]as|2\s*d[ií]as/i.test(trimmed)) {
+  // Check if ticket specifies weekly participation through explicit keywords
+  if (
+    /semanal|semana|abono|multisorteo|3\s*sorteos|2\s*sorteos|sem\.|3\s*d[ií]as|2\s*d[ií]as|tres\s*d[ií]as|tres\s*sorteos|para\s*los\s*tres|todos\s*los\s*sorteos|martes\s*y\s*viernes|lunes\s*a\s*domingo|lunes,\s*jueves\s*y\s*s[aá]bado/i.test(
+      trimmed
+    )
+  ) {
     ticketScope = 'weekly';
   }
 
@@ -238,14 +361,19 @@ export function parseTicketQR(qrText: string, defaultGame: GameType = 'primitiva
     raw: trimmed,
     game: detectedGame,
     date,
+    startDate,
+    endDate,
+    drawStart,
+    drawEnd,
     drawNumber,
     reintegro,
     bets,
     ticketCode,
     isOfficialSELAECode,
     ticketScope,
+    priceEur,
     notes: isOfficialSELAECode
-      ? 'Código oficial de resguardo detectado. Por motivos de seguridad de SELAE, los códigos oficiales están cifrados con el número de serie de la terminal.'
+      ? 'Código oficial de resguardo detectado. En los boletos físicos oficiales de SELAE, el código QR contiene el identificador criptográfico del terminal. Puedes introducir o confirmar tus apuestas para comprobar los sorteos de la semana.'
       : undefined,
   };
 }

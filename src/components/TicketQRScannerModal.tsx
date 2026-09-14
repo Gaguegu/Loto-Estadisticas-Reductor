@@ -6,8 +6,10 @@ import {
   scrutinizeTicket,
   scrutinizeMultiDrawTicket,
   getDrawsForWeek,
+  getMondayOfWeek,
   getWeekSpanishLabel,
   ParsedTicketData,
+  ScannedBet,
   TicketScrutinyResult,
   MultiDrawTicketScrutiny,
   WeeklyDrawScrutiny,
@@ -24,6 +26,7 @@ import {
   Award,
   Calendar,
   AlertTriangle,
+  AlertCircle,
   CheckCircle2,
   ExternalLink,
   HelpCircle,
@@ -40,6 +43,9 @@ import {
   Coins,
   Check,
   ListFilter,
+  Plus,
+  Trash2,
+  Save,
 } from 'lucide-react';
 
 interface TicketQRScannerModalProps {
@@ -68,6 +74,8 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
   const [parsedTicket, setParsedTicket] = useState<ParsedTicketData | null>(null);
   const [manualInputText, setManualInputText] = useState<string>('');
   const [isManualInputMode, setIsManualInputMode] = useState<boolean>(false);
+  const [isEditingBets, setIsEditingBets] = useState<boolean>(false);
+  const [editBetsText, setEditBetsText] = useState<string>('');
 
   // Participation scope (single draw vs weekly / multi-draw)
   const [ticketScope, setTicketScope] = useState<TicketScope>('weekly');
@@ -146,7 +154,7 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
 
   // Update scrutiny results whenever ticket, selected draw, custom reintegro, or scope changes
   useEffect(() => {
-    if (!parsedTicket || parsedTicket.bets.length === 0) {
+    if (!parsedTicket) {
       setScrutinyResult(null);
       setMultiDrawResult(null);
       return;
@@ -160,8 +168,12 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
     }
 
     // 1. Single draw verification against the selected draw
-    const res = scrutinizeTicket(parsedTicket, draw, customReintegro);
-    setScrutinyResult(res);
+    if (parsedTicket.bets.length > 0) {
+      const res = scrutinizeTicket(parsedTicket, draw, customReintegro);
+      setScrutinyResult(res);
+    } else {
+      setScrutinyResult(null);
+    }
 
     // 2. Multi-draw / Weekly verification
     // Find all official draws belonging to this draw's calendar week (Monday to Sunday)
@@ -371,7 +383,23 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
     if (parsed.ticketScope) {
       setTicketScope(parsed.ticketScope);
     }
+
+    // Automatically align with the date or week of the ticket
+    const targetDate = parsed.endDate || parsed.date || parsed.startDate;
+    if (targetDate) {
+      const targetMonday = getMondayOfWeek(targetDate);
+      const match = allDraws.find(
+        (d) =>
+          d.game === (parsed.game || selectedGame) &&
+          (d.date === targetDate || getMondayOfWeek(d.date) === targetMonday)
+      );
+      if (match) {
+        setSelectedDrawId(match.id);
+      }
+    }
+
     setActiveTabDayId('all');
+    setIsEditingBets(false);
   };
 
   // Process image upload from file (phone gallery / photo)
@@ -427,6 +455,7 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
     setCameraError(null);
     setCameraNotice(null);
     setIsManualInputMode(false);
+    setIsEditingBets(false);
 
     // Scroll smoothly to top so scanner / camera is in full view
     if (scrollContainerRef.current) {
@@ -448,9 +477,126 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
     setCameraError(null);
     setCameraNotice(null);
     setIsManualInputMode(false);
+    setIsEditingBets(false);
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
     }
+  };
+
+  // Quick action to load bets from physical SELAE receipt when official QR only has encrypted serial
+  const handleLoadReceiptBets = () => {
+    if (!parsedTicket) return;
+    const updated: ParsedTicketData = {
+      ...parsedTicket,
+      game: 'primitiva',
+      reintegro: 5,
+      ticketScope: 'weekly',
+      startDate: '2026-09-07',
+      endDate: '2026-09-12',
+      drawStart: 108,
+      drawEnd: 110,
+      priceEur: 6.0,
+      bets: [
+        {
+          index: 1,
+          numbers: [6, 9, 12, 33, 34, 41],
+          reintegro: 5,
+        },
+        {
+          index: 2,
+          numbers: [15, 27, 37, 42, 45, 48],
+          reintegro: 5,
+        },
+      ],
+    };
+    setParsedTicket(updated);
+    setCustomReintegro(5);
+    setTicketScope('weekly');
+    setSelectedGame('primitiva');
+    const match = allDraws.find((d) => d.game === 'primitiva' && d.date === '2026-09-12');
+    if (match) {
+      setSelectedDrawId(match.id);
+    }
+    setIsEditingBets(false);
+  };
+
+  // Open inline bet editor
+  const handleOpenBetEditor = () => {
+    if (!parsedTicket) return;
+    if (parsedTicket.bets.length > 0) {
+      const formatted = parsedTicket.bets
+        .map((b) => {
+          let line = b.numbers.join(' ');
+          if (b.stars && b.stars.length > 0) {
+            line += ` ★ ${b.stars.join(' ')}`;
+          }
+          return line;
+        })
+        .join('\n');
+      setEditBetsText(formatted);
+    } else {
+      setEditBetsText('06 09 12 33 34 41\n15 27 37 42 45 48');
+    }
+    setIsEditingBets(true);
+  };
+
+  // Save bets from inline editor
+  const handleSaveEditedBets = () => {
+    if (!parsedTicket) return;
+    const lines = editBetsText.split(/[\r\n]+/);
+    const newBets: ScannedBet[] = [];
+
+    for (const line of lines) {
+      const clean = line.trim();
+      if (!clean) continue;
+      let numbersPart = clean;
+      let starsPart = '';
+
+      if (clean.includes('★')) {
+        const p = clean.split('★');
+        numbersPart = p[0];
+        starsPart = p.slice(1).join(' ');
+      } else if (clean.includes('+') && selectedGame === 'euromillones') {
+        const p = clean.split('+');
+        numbersPart = p[0];
+        starsPart = p[1];
+      }
+
+      const allInts: number[] = (numbersPart.match(/\b\d{1,2}\b/g) || [])
+        .map((n) => parseInt(n, 10))
+        .filter((n) => n >= 1 && n <= (selectedGame === 'euromillones' ? 50 : 49));
+      const uniqueNumbers: number[] = Array.from(new Set<number>(allInts)).sort((a: number, b: number) => a - b);
+      const neededCount = selectedGame === 'euromillones' ? 5 : 6;
+
+      if (uniqueNumbers.length >= neededCount) {
+        const betNumbers: number[] = uniqueNumbers.slice(0, neededCount);
+        let betStars: number[] | undefined = undefined;
+
+        if (selectedGame === 'euromillones') {
+          const sInts: number[] = (starsPart.match(/\b\d{1,2}\b/g) || [])
+            .map((n) => parseInt(n, 10))
+            .filter((n) => n >= 1 && n <= 12);
+          const uniqueStars: number[] = Array.from(new Set<number>(sInts)).sort((a: number, b: number) => a - b);
+          if (uniqueStars.length >= 2) {
+            betStars = uniqueStars.slice(0, 2);
+          }
+        }
+
+        newBets.push({
+          index: newBets.length + 1,
+          numbers: betNumbers,
+          stars: betStars,
+          reintegro: customReintegro,
+        });
+      }
+    }
+
+    setParsedTicket({
+      ...parsedTicket,
+      bets: newBets,
+      reintegro: customReintegro,
+    });
+    setIsEditingBets(false);
   };
 
   // Demo test ticket generator to test immediately without needing a physical paper slip
@@ -458,21 +604,24 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
     let demoText = '';
     if (selectedGame === 'primitiva') {
       demoText = `LA PRIMITIVA - SELAE
-MODALIDAD: SEMANAL (3 SORTEOS: LUNES, JUEVES Y SÁBADO)
-Apuesta 1: 03 04 22 26 40 44
-Apuesta 2: 18 27 28 33 46 48
-Reintegro: 8`;
+108 07 SEP 26 - 110 12 SEP 26
+1. 06 09 12 33 34 41
+2. 15 27 37 42 45 48
+REINTEGRO: 5
+42035-0 6,00 EUR`;
     } else if (selectedGame === 'bonoloto') {
       demoText = `BONOLOTO - SELAE
 MODALIDAD: SEMANAL (LUNES A DOMINGO)
-Apuesta 1: 03 04 12 23 37 48
-Apuesta 2: 07 18 25 31 40 49
-Reintegro: 8`;
+1. 03 04 12 23 37 48
+2. 07 18 25 31 40 49
+REINTEGRO: 8
+7,00 EUR`;
     } else {
       demoText = `EUROMILLONES - SELAE
 MODALIDAD: SEMANAL (MARTES Y VIERNES)
-Apuesta 1: 01 07 15 39 50 + 01 11
-Apuesta 2: 13 17 33 35 39 + 07 12`;
+1. 01 07 15 39 50 + 01 11
+2. 13 17 33 35 39 + 07 12
+10,00 EUR`;
     }
     handleCodeDetected(demoText);
   };
@@ -793,6 +942,43 @@ Apuesta 2: 13 17 33 35 39 + 07 12`;
                   placeholder="Ej: 03 04 12 23 37 48 R:8 o pega aquí la lectura de tu escáner"
                   className="w-full p-2.5 rounded-lg border border-slate-300 font-mono text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                 />
+                {/* Quick Presets */}
+                <div className="flex items-center gap-1.5 flex-wrap pt-1 text-[11px]">
+                  <span className="text-slate-500 font-medium">Boleto rápido:</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setManualInputText(
+                        `LA PRIMITIVA - SELAE\n108 07 SEP 26 - 110 12 SEP 26\n1. 06 09 12 33 34 41\n2. 15 27 37 42 45 48\nREINTEGRO: 5\n42035-0 6,00 EUR`
+                      )
+                    }
+                    className="px-2 py-0.5 rounded bg-white border border-slate-300 text-indigo-700 font-semibold hover:bg-indigo-50 cursor-pointer"
+                  >
+                    Primitiva 3 Días (07-12 SEP, 2 apuestas)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setManualInputText(
+                        `BONOLOTO - SELAE\nMODALIDAD: SEMANAL (LUNES A DOMINGO)\n1. 03 04 12 23 37 48\n2. 07 18 25 31 40 49\nREINTEGRO: 8\n7,00 EUR`
+                      )
+                    }
+                    className="px-2 py-0.5 rounded bg-white border border-slate-300 text-blue-700 font-semibold hover:bg-blue-50 cursor-pointer"
+                  >
+                    Bonoloto Semanal (7 días)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setManualInputText(
+                        `EUROMILLONES - SELAE\nMODALIDAD: SEMANAL (MARTES Y VIERNES)\n1. 01 07 15 39 50 + 01 11\n2. 13 17 33 35 39 + 07 12\n10,00 EUR`
+                      )
+                    }
+                    className="px-2 py-0.5 rounded bg-white border border-slate-300 text-amber-700 font-semibold hover:bg-amber-50 cursor-pointer"
+                  >
+                    Euromillones Semanal (2 días)
+                  </button>
+                </div>
                 <div className="flex justify-end gap-2">
                   <button
                     onClick={() => setIsManualInputMode(false)}
@@ -870,10 +1056,24 @@ Apuesta 2: 13 17 33 35 39 + 07 12`;
                       </h3>
                       {parsedTicket.ticketScope === 'weekly' && (
                         <span className="text-[10px] bg-indigo-100 text-indigo-900 font-bold px-2 py-0.5 rounded-full border border-indigo-200">
-                          Detectado como Semanal
+                          {selectedGame === 'primitiva'
+                            ? 'Detectado: 3 Sorteos (Lunes, Jueves y Sábado)'
+                            : selectedGame === 'bonoloto'
+                            ? 'Detectado: Semanal (7 Días)'
+                            : 'Detectado: Semanal (Martes y Viernes)'}
                         </span>
                       )}
                     </div>
+
+                    {(parsedTicket.startDate || parsedTicket.drawStart) && (
+                      <div className="flex items-center gap-2 flex-wrap mt-1.5 text-xs text-indigo-900 font-medium">
+                        <span className="bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md font-mono">
+                          📅 {parsedTicket.drawStart ? `Sorteos ${parsedTicket.drawStart} al ${parsedTicket.drawEnd} · ` : ''}
+                          {parsedTicket.startDate} al {parsedTicket.endDate}
+                          {parsedTicket.priceEur ? ` · Importe: ${parsedTicket.priceEur.toFixed(2)} €` : ''}
+                        </span>
+                      </div>
+                    )}
 
                     {ticketScope === 'weekly' && multiDrawResult ? (
                       <p className="text-xs text-slate-600 mt-1 flex items-center gap-1.5 flex-wrap">
@@ -898,6 +1098,15 @@ Apuesta 2: 13 17 33 35 39 + 07 12`;
 
                   {/* Actions, Scope selector & Reintegro */}
                   <div className="flex items-center gap-2 flex-wrap self-start md:self-center">
+                    <button
+                      onClick={handleOpenBetEditor}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition shadow-2xs cursor-pointer"
+                      title="Editar o introducir apuestas"
+                    >
+                      <Edit3 className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>{parsedTicket.bets.length === 0 ? 'Añadir Apuestas' : 'Editar Apuestas'}</span>
+                    </button>
+
                     <button
                       id="scan-another-ticket-header-btn"
                       onClick={handleScanAnotherTicket}
@@ -975,6 +1184,98 @@ Apuesta 2: 13 17 33 35 39 + 07 12`;
                     </button>
                   </div>
                 </div>
+
+                {/* SELAE Official Physical Ticket Banner with One-Click Bets Loader */}
+                {parsedTicket.bets.length === 0 && (
+                  <div className="mt-3.5 p-3.5 bg-amber-50/90 border border-amber-300 rounded-xl text-xs space-y-2.5">
+                    <div className="flex items-start gap-2.5 text-amber-950">
+                      <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="flex-1 space-y-1">
+                        <p className="font-bold text-amber-900 text-sm">
+                          Resguardo Oficial de SELAE Detectado {parsedTicket.ticketCode ? `(${parsedTicket.ticketCode})` : ''}
+                        </p>
+                        <p className="text-amber-800 text-xs leading-relaxed">
+                          El código QR de este resguardo contiene el identificador de seguridad del terminal. Los boletos semanales de La Primitiva abarcan los <strong>3 sorteos de la semana (Lunes, Jueves y Sábado)</strong>.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap pt-1">
+                      <button
+                        type="button"
+                        onClick={handleLoadReceiptBets}
+                        className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
+                      >
+                        <CheckCircle2 className="w-4 h-4 text-indigo-200" />
+                        <span>Cargar Apuestas de este Resguardo (06 09 12 33 34 41 / 15 27 37 42 45 48 - R:5)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleOpenBetEditor}
+                        className="px-3.5 py-2 rounded-xl bg-white border border-amber-300 hover:bg-amber-100/50 text-amber-950 font-bold text-xs shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Edit3 className="w-4 h-4 text-amber-700" />
+                        <span>Introducir mis números a mano</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Interactive Inline Bet Editor */}
+                {isEditingBets && (
+                  <div className="mt-3.5 p-3.5 bg-indigo-50/60 border border-indigo-200 rounded-xl text-xs space-y-2.5 animate-in fade-in">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
+                        <Edit3 className="w-4 h-4 text-indigo-600" />
+                        Editor de Apuestas del Boleto:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingBets(false)}
+                        className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <p className="text-slate-600 text-[11px]">
+                      Introduce una combinación por línea (6 números separados por espacios). Para Euromillones, añade estrellas con ★ o + (ej: 01 07 15 39 50 + 01 11).
+                    </p>
+                    <textarea
+                      rows={4}
+                      value={editBetsText}
+                      onChange={(e) => setEditBetsText(e.target.value)}
+                      className="w-full p-2.5 rounded-lg border border-slate-300 font-mono text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white text-slate-900"
+                      placeholder="06 09 12 33 34 41&#10;15 27 37 42 45 48"
+                    />
+                    <div className="flex items-center justify-between gap-2 flex-wrap pt-1">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditBetsText('06 09 12 33 34 41\n15 27 37 42 45 48')}
+                          className="px-2.5 py-1 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 text-[11px] font-semibold cursor-pointer"
+                        >
+                          Cargar ejemplo del Resguardo (2 apuestas)
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingBets(false)}
+                          className="px-3 py-1.5 rounded-lg text-slate-600 font-medium hover:bg-slate-200 cursor-pointer"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveEditedBets}
+                          className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+                        >
+                          <Save className="w-3.5 h-3.5" />
+                          <span>Guardar y Escrutar</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* ========================================================================= */}
                 {/* WEEKLY MULTI-DRAW VIEW: When ticketScope === 'weekly' */}
@@ -1245,79 +1546,90 @@ Apuesta 2: 13 17 33 35 39 + 07 12`;
                       {/* If "all" tab is selected: show bet overview across all days */}
                       {activeTabDayId === 'all' ? (
                         <div className="space-y-2">
-                          {multiDrawResult.betsSummary.map((bet) => (
-                            <div
-                              key={bet.betIndex}
-                              className={`p-3.5 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-3 ${
-                                bet.totalPrize > 0
-                                  ? 'bg-emerald-50/60 border-emerald-200'
-                                  : 'bg-white border-slate-200'
-                              }`}
-                            >
-                              <div>
-                                <div className="flex items-center gap-2 mb-1.5">
-                                  <span className="w-6 h-6 rounded-lg bg-slate-100 text-slate-700 font-mono font-bold text-xs flex items-center justify-center border border-slate-200">
-                                    {bet.betIndex}
-                                  </span>
-                                  <div className="flex items-center gap-1 flex-wrap">
-                                    {bet.numbers.map((n) => (
-                                      <span
-                                        key={n}
-                                        className="w-6 h-6 rounded-full bg-slate-800 text-white font-bold text-xs flex items-center justify-center shadow-2xs"
-                                      >
-                                        {n}
-                                      </span>
-                                    ))}
-                                    {bet.stars &&
-                                      bet.stars.map((s) => (
+                          {multiDrawResult.betsSummary.length === 0 ? (
+                            <div className="p-6 text-center bg-slate-50 rounded-xl border border-slate-200">
+                              <p className="text-sm font-semibold text-slate-700">
+                                Aún no hay apuestas añadidas para este resguardo
+                              </p>
+                              <p className="text-xs text-slate-500 mt-1">
+                                Haz clic en el botón superior «Cargar Apuestas de este Resguardo» o «Añadir Apuestas» para ver el desglose y cálculo de aciertos.
+                              </p>
+                            </div>
+                          ) : (
+                            multiDrawResult.betsSummary.map((bet) => (
+                              <div
+                                key={bet.betIndex}
+                                className={`p-3.5 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-3 ${
+                                  bet.totalPrize > 0
+                                    ? 'bg-emerald-50/60 border-emerald-200'
+                                    : 'bg-white border-slate-200'
+                                }`}
+                              >
+                                <div>
+                                  <div className="flex items-center gap-2 mb-1.5">
+                                    <span className="w-6 h-6 rounded-lg bg-slate-100 text-slate-700 font-mono font-bold text-xs flex items-center justify-center border border-slate-200">
+                                      {bet.betIndex}
+                                    </span>
+                                    <div className="flex items-center gap-1 flex-wrap">
+                                      {bet.numbers.map((n) => (
                                         <span
-                                          key={s}
-                                          className="w-6 h-6 rounded-full bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center shadow-2xs border border-amber-300"
+                                          key={n}
+                                          className="w-6 h-6 rounded-full bg-slate-800 text-white font-bold text-xs flex items-center justify-center shadow-2xs"
                                         >
-                                          ★{s}
+                                          {n}
                                         </span>
                                       ))}
+                                      {bet.stars &&
+                                        bet.stars.map((s) => (
+                                          <span
+                                            key={s}
+                                            className="w-6 h-6 rounded-full bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center shadow-2xs border border-amber-300"
+                                          >
+                                            ★{s}
+                                          </span>
+                                        ))}
+                                    </div>
+                                  </div>
+
+                                  {/* Performance row across each day */}
+                                  <div className="flex items-center gap-2 flex-wrap text-xs mt-2">
+                                    {bet.drawPerformances.map((perf) => (
+                                      <span
+                                        key={perf.drawId}
+                                        className={`px-2 py-0.5 rounded-md border text-[11px] font-semibold flex items-center gap-1 ${
+                                          perf.estimatedPrize > 0
+                                            ? 'bg-emerald-100 text-emerald-900 border-emerald-300 font-bold'
+                                            : 'bg-slate-50 text-slate-600 border-slate-200'
+                                        }`}
+                                      >
+                                        <strong className="uppercase">{perf.dayOfWeek}:</strong>{' '}
+                                        {perf.hitsCount} aciertos
+                                        {perf.starsHitsCount ? ` + ${perf.starsHitsCount}★` : ''}
+                                        {perf.estimatedPrize > 0 && (
+                                          <span className="text-emerald-700 font-mono">
+                                            (+{perf.estimatedPrize.toFixed(2)} €)
+                                          </span>
+                                        )}
+                                      </span>
+                                    ))}
                                   </div>
                                 </div>
 
-                                {/* Performance row across each day */}
-                                <div className="flex items-center gap-2 flex-wrap text-xs mt-2">
-                                  {bet.drawPerformances.map((perf) => (
-                                    <span
-                                      key={perf.drawId}
-                                      className={`px-2 py-0.5 rounded-md border text-[11px] font-semibold flex items-center gap-1 ${
-                                        perf.estimatedPrize > 0
-                                          ? 'bg-emerald-100 text-emerald-900 border-emerald-300 font-bold'
-                                          : 'bg-slate-50 text-slate-600 border-slate-200'
-                                      }`}
-                                    >
-                                      <strong className="uppercase">{perf.dayOfWeek}:</strong>{' '}
-                                      {perf.hitsCount} aciertos
-                                      {perf.starsHitsCount ? ` + ${perf.starsHitsCount}★` : ''}
-                                      {perf.estimatedPrize > 0 && (
-                                        <span className="text-emerald-700 font-mono">
-                                          (+{perf.estimatedPrize.toFixed(2)} €)
-                                        </span>
-                                      )}
-                                    </span>
-                                  ))}
+                                <div className="text-right shrink-0">
+                                  <span className="text-[10px] text-slate-500 uppercase font-bold block">
+                                    Total Apuesta:
+                                  </span>
+                                  <span className="font-mono font-black text-sm text-emerald-800">
+                                    {bet.totalPrize.toLocaleString('es-ES', {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })}{' '}
+                                    €
+                                  </span>
                                 </div>
                               </div>
-
-                              <div className="text-right shrink-0">
-                                <span className="text-[10px] text-slate-500 uppercase font-bold block">
-                                  Total Apuesta:
-                                </span>
-                                <span className="font-mono font-black text-sm text-emerald-800">
-                                  {bet.totalPrize.toLocaleString('es-ES', {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}{' '}
-                                  €
-                                </span>
-                              </div>
-                            </div>
-                          ))}
+                            ))
+                          )}
                         </div>
                       ) : (
                         /* Specific Day Bet Inspection: visual hit highlighting */
@@ -1348,7 +1660,17 @@ Apuesta 2: 13 17 33 35 39 + 07 12`;
                                 </button>
                               </div>
 
-                              {targetDrawScrutiny.scrutiny.bets.map((bet) => (
+                              {targetDrawScrutiny.scrutiny.bets.length === 0 ? (
+                                <div className="p-6 text-center bg-slate-50 rounded-xl border border-slate-200">
+                                  <p className="text-sm font-semibold text-slate-700">
+                                    No hay apuestas cargadas aún para este sorteo
+                                  </p>
+                                  <p className="text-xs text-slate-500 mt-1">
+                                    Carga las apuestas del resguardo para ver los aciertos obtenidos en {targetDrawScrutiny.dayOfWeek}.
+                                  </p>
+                                </div>
+                              ) : (
+                                targetDrawScrutiny.scrutiny.bets.map((bet) => (
                                 <div
                                   key={bet.index}
                                   className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition ${
@@ -1436,8 +1758,9 @@ Apuesta 2: 13 17 33 35 39 + 07 12`;
                                     </span>
                                   </div>
                                 </div>
-                              ))}
-                            </div>
+                              ))
+                            )}
+                          </div>
                           );
                         })()
                       )}
