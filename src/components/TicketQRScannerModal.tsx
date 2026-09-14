@@ -248,49 +248,57 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
 
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error('Tu dispositivo o navegador no permite el acceso a la cámara en directo. Usa el botón «📸 Hacer Foto al Boleto».');
+        throw new Error('El navegador no soporta streaming continuo. Pulsa en «📸 Hacer Foto al Boleto».');
       }
 
       const deviceIdToUse = targetDeviceId !== undefined ? targetDeviceId : selectedDeviceId;
 
-      let constraints: MediaStreamConstraints;
+      let stream: MediaStream | null = null;
+
+      // Strategy 1: If deviceId provided, try deviceId first
       if (deviceIdToUse) {
-        constraints = {
-          video: {
-            deviceId: { exact: deviceIdToUse },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-          audio: false,
-        };
-      } else {
-        constraints = {
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-          audio: false,
-        };
+        try {
+          stream = await requestMediaStreamWithTimeout(
+            {
+              video: { deviceId: { exact: deviceIdToUse } },
+              audio: false,
+            },
+            4000
+          );
+        } catch (e) {
+          console.warn('Exact deviceId failed, falling back to facingMode:', e);
+        }
       }
 
-      let stream: MediaStream;
-      try {
-        stream = await requestMediaStreamWithTimeout(constraints, 3000);
-      } catch (firstErr: any) {
-        if (firstErr.name === 'TimeoutError' || firstErr.message === 'TIMEOUT_CAMERA_ACCESS') {
-          throw firstErr;
+      // Strategy 2: Try environment facing camera (back camera on phones)
+      if (!stream) {
+        try {
+          stream = await requestMediaStreamWithTimeout(
+            {
+              video: { facingMode: { ideal: 'environment' } },
+              audio: false,
+            },
+            4000
+          );
+        } catch (e) {
+          console.warn('FacingMode failed, falling back to basic video: true:', e);
         }
-        console.warn('Constraint getUserMedia failed, retrying with fallback:', firstErr);
-        // Fallback to basic video request if constrained request fails
-        stream = await requestMediaStreamWithTimeout({ video: true, audio: false }, 2500);
+      }
+
+      // Strategy 3: Simplest constraint { video: true }
+      if (!stream) {
+        stream = await requestMediaStreamWithTimeout({ video: true, audio: false }, 4000);
+      }
+
+      if (!stream) {
+        throw new Error('No se pudo obtener la señal de vídeo de la cámara.');
       }
 
       streamRef.current = stream;
       setIsCameraActive(true);
       setIsStartingCamera(false);
 
-      // Now query device list with labels (labels become populated after permission is granted!)
+      // Query device list with labels after permission granted
       await enumerateCameras();
     } catch (err: any) {
       console.error('Camera access error:', err);
@@ -298,7 +306,7 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
       setIsCameraActive(false);
       if (err.name === 'TimeoutError' || err.message === 'TIMEOUT_CAMERA_ACCESS') {
         setCameraError(
-          'La cámara de vídeo continuo no está disponible en este dispositivo (las aplicaciones instaladas en Android restringen el streaming web por seguridad). Pulsa en el botón verde «📸 Hacer Foto al Boleto» para abrir la cámara nativa de tu teléfono al instante, o utiliza el «Teclado Táctil».'
+          'La cámara de vídeo continuo no pudo iniciarse en esta app instalada. En teléfonos móviles Android, pulsa en el botón verde superior «📸 Hacer Foto al Boleto» para abrir la cámara de tu teléfono al instante con la máxima resolución.'
         );
       } else if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
         setCameraError(
@@ -310,7 +318,7 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
         );
       } else {
         setCameraError(
-          `No se pudo iniciar la cámara en directo (${err.message || 'error desconocido'}). Usa «📸 Hacer Foto al Boleto» para escanear el resguardo directamente.`
+          `Aviso al abrir vídeo continuo: ${err.message || 'La aplicación WebView no permite stream de vídeo continuo'}. Pulsa en «📸 Hacer Foto al Boleto» para enfocar y escanear directamente.`
         );
       }
     }
@@ -1180,10 +1188,11 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
               {/* Action Buttons: 2 Big Mobile-Friendly Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 {/* Primary Button: Mobile Camera Intent */}
-                <label
-                  htmlFor="qr-camera-direct-input"
+                <button
+                  type="button"
                   id="mobile-camera-capture-trigger"
-                  className="flex items-center gap-3 p-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-sm transition active:scale-98 text-left cursor-pointer border border-emerald-500/50 group"
+                  onClick={handleOpenCameraCapture}
+                  className="flex items-center gap-3 p-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-sm transition active:scale-98 text-left cursor-pointer border border-emerald-500/50 group w-full"
                 >
                   <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
                     <Camera className="w-6 h-6 text-white" />
@@ -1197,13 +1206,14 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
                       Abre la cámara de tu teléfono al instante para enfocar el resguardo
                     </p>
                   </div>
-                </label>
+                </button>
 
                 {/* Secondary Button: Gallery Picker */}
-                <label
-                  htmlFor="qr-gallery-direct-input"
+                <button
+                  type="button"
                   id="gallery-file-picker-trigger"
-                  className="flex items-center gap-3 p-3.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-300 shadow-2xs transition active:scale-98 text-left cursor-pointer group"
+                  onClick={handleOpenGalleryPicker}
+                  className="flex items-center gap-3 p-3.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-300 shadow-2xs transition active:scale-98 text-left cursor-pointer group w-full"
                 >
                   <div className="w-11 h-11 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
                     <ImageIcon className="w-6 h-6 text-indigo-600" />
@@ -1216,7 +1226,7 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
                       Selecciona una foto ya guardada en tu teléfono o archivo de tu PC
                     </p>
                   </div>
-                </label>
+                </button>
               </div>
 
               {/* Secondary Actions Bar */}
@@ -1248,11 +1258,11 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
                       <button
                         type="button"
                         onClick={() => startCamera()}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-300 transition cursor-pointer"
-                        title="Vídeo en directo por streaming (recomendado para PC o portátil con webcam)"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold border border-indigo-200 transition cursor-pointer shadow-2xs active:scale-95"
+                        title="Activar escáner de vídeo continuo en directo (Cámara trasera o Webcam)"
                       >
-                        <Video className="w-3.5 h-3.5 text-slate-600" />
-                        <span>Vídeo Continuo (Webcam PC)</span>
+                        <Video className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Escanear en Directo (Vídeo)</span>
                       </button>
                     )
                   ) : (
