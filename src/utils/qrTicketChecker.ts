@@ -138,28 +138,28 @@ export function parseTicketQR(qrText: string, defaultGame: GameType = 'primitiva
   const lower = trimmed.toLowerCase();
 
   // Detect game from keywords or code prefixes
-  if (lower.includes('euromillones') || lower.includes('emil') || lower.includes('euro') || lower.includes('j=em')) {
+  if (lower.includes('euromillones') || lower.includes('emil') || lower.includes('euro') || lower.includes('j=em') || /^0[35]-\d{5}-/i.test(trimmed) || /^\d{5}-0[35]\d{2}-/.test(trimmed)) {
     detectedGame = 'euromillones';
-  } else if (lower.includes('bonoloto') || lower.includes('bono') || lower.includes('j=bn') || lower.includes('j=bo')) {
+  } else if (lower.includes('bonoloto') || lower.includes('bono') || lower.includes('j=bn') || lower.includes('j=bo') || /^02-\d{5}-/i.test(trimmed) || /^\d{5}-02\d{2}-/.test(trimmed)) {
     detectedGame = 'bonoloto';
-  } else if (lower.includes('primitiva') || lower.includes('prim') || lower.includes('j=lp') || lower.includes('j=pr')) {
+  } else if (lower.includes('primitiva') || lower.includes('prim') || lower.includes('j=lp') || lower.includes('j=pr') || /^01-\d{5}-/i.test(trimmed) || /^\d{5}-01\d{2}-/.test(trimmed)) {
     detectedGame = 'primitiva';
   }
 
   // Check if it's an official SELAE receipt / QR code / terminal serial
-  // Official barcodes look like: 13218-0102-09354-20397-01769-54895-46458
-  // or QR code content: 01-13218-E37703CAB8E1B120EF64
+  // Official barcodes look like: 13219-0202-16943-19642-34804-98941-41919
+  // or QR code content: 02-13219-24F9A4F017CD31B88882F
   if (
     trimmed.includes('loteriasyapuestas.es') ||
     trimmed.includes('selae') ||
     /^\d{5}-\d{4}-\d{5}/.test(trimmed) ||
     /^\d{2}-\d{5}-[A-Z0-9]+/i.test(trimmed) ||
-    /^[A-Z0-9]{15,40}$/i.test(trimmed)
+    /^[A-Z0-9]{15,45}$/i.test(trimmed)
   ) {
     isOfficialSELAECode = true;
     ticketCode = trimmed;
     // For official SELAE receipts where bets are encrypted in the QR, default to weekly
-    // so that multi-day abonos are evaluated across all available days in the week
+    // unless single-day price or date indicates otherwise
     ticketScope = 'weekly';
   }
 
@@ -203,11 +203,22 @@ export function parseTicketQR(qrText: string, defaultGame: GameType = 'primitiva
     }
   }
 
-  // 3. Detect Single Spanish Date (e.g. "12 SEP 26" or "07 SEP 2026")
+  // 3. Detect Single Spanish Date with optional draw number (e.g. "251 08 SEP 26", "108 07 SEP 26", or "08 SEP 26")
   if (!date) {
-    const spanishSingleDate = trimmed.match(/(\d{1,2})\s+([A-Za-z]{3,10})\s+(\d{2,4})/);
-    if (spanishSingleDate) {
-      date = formatIsoDate(spanishSingleDate[1], spanishSingleDate[2], spanishSingleDate[3]);
+    const spanishSingleWithDraw = trimmed.match(/(?:^|[^\d])(\d{1,4})\s+(\d{1,2})\s+([A-Za-z]{3,10})\s+(\d{2,4})/);
+    if (
+      spanishSingleWithDraw &&
+      parseInt(spanishSingleWithDraw[2], 10) >= 1 &&
+      parseInt(spanishSingleWithDraw[2], 10) <= 31 &&
+      SPANISH_MONTHS[spanishSingleWithDraw[3].toUpperCase()]
+    ) {
+      drawNumber = spanishSingleWithDraw[1];
+      date = formatIsoDate(spanishSingleWithDraw[2], spanishSingleWithDraw[3], spanishSingleWithDraw[4]);
+    } else {
+      const spanishSingleDate = trimmed.match(/(?:^|[^\d])(\d{1,2})\s+([A-Za-z]{3,10})\s+(\d{2,4})/);
+      if (spanishSingleDate && SPANISH_MONTHS[spanishSingleDate[2].toUpperCase()]) {
+        date = formatIsoDate(spanishSingleDate[1], spanishSingleDate[2], spanishSingleDate[3]);
+      }
     }
   }
 
@@ -223,7 +234,7 @@ export function parseTicketQR(qrText: string, defaultGame: GameType = 'primitiva
     }
   }
 
-  // 5. Detect Price in EUR (e.g. "6,00 EUR" or "3,00 EUR")
+  // 5. Detect Price in EUR (e.g. "6,00 EUR", "4,00 EUR", "0,50 EUR")
   const priceMatch = trimmed.match(/(\d+[.,]\d{2})\s*(?:EUR|€)/i);
   if (priceMatch) {
     priceEur = parseFloat(priceMatch[1].replace(',', '.'));
@@ -231,9 +242,13 @@ export function parseTicketQR(qrText: string, defaultGame: GameType = 'primitiva
     if (detectedGame === 'primitiva' && (priceEur === 3 || priceEur === 6 || priceEur === 9 || priceEur === 12)) {
       ticketScope = 'weekly';
     }
+    // In Bonoloto: 4,00 € for 8 bets is 1 daily draw (0.50€ * 8 = 4.00€)
+    if (detectedGame === 'bonoloto' && priceEur === 4.0 && !trimmed.toLowerCase().includes('semanal')) {
+      ticketScope = 'single';
+    }
   }
 
-  // 6. Detect Reintegro if present (R=5 or R:5 or Reintegro: 5 or REINTEGRO: 5)
+  // 6. Detect Reintegro if present (R=5 or R:5 or Reintegro: 5 or REINTEGRO: 5 or REINTEGRO: 0)
   const rMatch = trimmed.match(/(?:R|REINTEGRO)[=:\s]+(\d)/i);
   if (rMatch) {
     reintegro = parseInt(rMatch[1], 10);
@@ -313,7 +328,8 @@ export function parseTicketQR(qrText: string, defaultGame: GameType = 'primitiva
   }
 
   // If no bets were found via line parsing, search whole string for groups of numbers
-  if (bets.length === 0) {
+  // (Do not do this for pure official SELAE serial hashes/barcodes where numbers are terminal IDs)
+  if (bets.length === 0 && !isOfficialSELAECode) {
     const allInts = (trimmed.match(/\b\d{1,2}\b/g) || [])
       .map((n) => parseInt(n, 10))
       .filter((n) => n >= 1 && n <= (detectedGame === 'euromillones' ? 50 : 49));

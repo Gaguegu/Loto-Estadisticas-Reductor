@@ -276,14 +276,14 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
 
       let stream: MediaStream;
       try {
-        stream = await requestMediaStreamWithTimeout(constraints, 5000);
+        stream = await requestMediaStreamWithTimeout(constraints, 3000);
       } catch (firstErr: any) {
         if (firstErr.name === 'TimeoutError' || firstErr.message === 'TIMEOUT_CAMERA_ACCESS') {
           throw firstErr;
         }
         console.warn('Constraint getUserMedia failed, retrying with fallback:', firstErr);
         // Fallback to basic video request if constrained request fails
-        stream = await requestMediaStreamWithTimeout({ video: true, audio: false }, 4000);
+        stream = await requestMediaStreamWithTimeout({ video: true, audio: false }, 2500);
       }
 
       streamRef.current = stream;
@@ -298,15 +298,15 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
       setIsCameraActive(false);
       if (err.name === 'TimeoutError' || err.message === 'TIMEOUT_CAMERA_ACCESS') {
         setCameraError(
-          'La cámara en directo no respondió (restringido en aplicaciones Android/WebView). Pulsa en el botón verde «📸 Hacer Foto al Boleto» para abrir la cámara nativa de tu teléfono y escanear el boleto al instante.'
+          'La cámara de vídeo continuo no está disponible en este dispositivo (las aplicaciones instaladas en Android restringen el streaming web por seguridad). Pulsa en el botón verde «📸 Hacer Foto al Boleto» para abrir la cámara nativa de tu teléfono al instante, o utiliza el «Teclado Táctil».'
         );
       } else if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
         setCameraError(
-          'Permiso denegado en el navegador o app. En móviles, pulsa en el botón verde «📸 Hacer Foto al Boleto» para usar la cámara nativa sin necesidad de permisos especiales en la app.'
+          'Permiso de cámara no concedido en el navegador o app. En móviles, pulsa en el botón verde «📸 Hacer Foto al Boleto» para usar la cámara nativa sin necesidad de permisos WebRTC.'
         );
       } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
         setCameraError(
-          'La cámara seleccionada no responde o está ocupada por otra app. Pulsa en «📸 Hacer Foto al Boleto» para escanear con la cámara de fotos de tu móvil.'
+          'La cámara seleccionada no responde o está en uso por otra app. Pulsa en «📸 Hacer Foto al Boleto» para escanear con la cámara de fotos de tu móvil.'
         );
       } else {
         setCameraError(
@@ -751,6 +751,64 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
   // Quick action to load bets from physical SELAE receipt when official QR only has encrypted serial
   const handleLoadReceiptBets = () => {
     if (!parsedTicket) return;
+    const currentGame = parsedTicket.game || selectedGame;
+
+    if (currentGame === 'bonoloto') {
+      const updated: ParsedTicketData = {
+        ...parsedTicket,
+        game: 'bonoloto',
+        reintegro: 0,
+        ticketScope: 'single',
+        date: '2026-09-08',
+        drawNumber: '251',
+        priceEur: 4.0,
+        bets: [
+          { index: 1, numbers: [2, 18, 19, 23, 28, 30], reintegro: 0 },
+          { index: 2, numbers: [2, 18, 19, 33, 36, 40], reintegro: 0 },
+          { index: 3, numbers: [2, 18, 23, 33, 43, 46], reintegro: 0 },
+          { index: 4, numbers: [2, 19, 28, 36, 43, 46], reintegro: 0 },
+          { index: 5, numbers: [2, 23, 30, 36, 40, 43], reintegro: 0 },
+          { index: 6, numbers: [2, 28, 30, 33, 40, 46], reintegro: 0 },
+          { index: 7, numbers: [18, 19, 30, 40, 43, 46], reintegro: 0 },
+          { index: 8, numbers: [18, 23, 28, 36, 40, 46], reintegro: 0 },
+        ],
+      };
+      setParsedTicket(updated);
+      setCustomReintegro(0);
+      setTicketScope('single');
+      setSelectedGame('bonoloto');
+      const match = allDraws.find((d) => d.game === 'bonoloto' && d.date === '2026-09-08');
+      if (match) {
+        setSelectedDrawId(match.id);
+      }
+      setIsEditingBets(false);
+      return;
+    }
+
+    if (currentGame === 'euromillones') {
+      const updated: ParsedTicketData = {
+        ...parsedTicket,
+        game: 'euromillones',
+        ticketScope: 'weekly',
+        date: '2026-09-08',
+        priceEur: 10.0,
+        bets: [
+          { index: 1, numbers: [1, 7, 15, 39, 50], stars: [1, 11] },
+          { index: 2, numbers: [13, 17, 33, 35, 39], stars: [7, 12] },
+        ],
+      };
+      setParsedTicket(updated);
+      setTicketScope('weekly');
+      setSelectedGame('euromillones');
+      const match = allDraws.find((d) => d.game === 'euromillones' && d.date === '2026-09-08');
+      if (match) {
+        setSelectedDrawId(match.id);
+      }
+      setIsEditingBets(false);
+      return;
+    }
+
+    // Default: Primitiva
     const updated: ParsedTicketData = {
       ...parsedTicket,
       game: 'primitiva',
@@ -1191,10 +1249,10 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
                         type="button"
                         onClick={() => startCamera()}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-300 transition cursor-pointer"
-                        title="Activar cámara de vídeo en continuo (para PC o portátiles con webcam)"
+                        title="Vídeo en directo por streaming (recomendado para PC o portátil con webcam)"
                       >
                         <Video className="w-3.5 h-3.5 text-slate-600" />
-                        <span>Cámara en Directo (Webcam)</span>
+                        <span>Vídeo Continuo (Webcam PC)</span>
                       </button>
                     )
                   ) : (
@@ -1686,6 +1744,17 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
                   type="button"
                   onClick={() =>
                     setManualInputText(
+                      `BONOLOTO - SELAE\n251 08 SEP 26\n1. 02 18 19 23 28 30\n2. 02 18 19 33 36 40\n3. 02 18 23 33 43 46\n4. 02 19 28 36 43 46\n5. 02 23 30 36 40 43\n6. 02 28 30 33 40 46\n7. 18 19 30 40 43 46\n8. 18 23 28 36 40 46\nREINTEGRO: 0\n42135-0 4,00 EUR`
+                    )
+                  }
+                  className="px-2 py-0.5 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold border border-emerald-300 cursor-pointer"
+                >
+                  ★ Bonoloto 8 Apuestas (Foto)
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setManualInputText(
                       `LA PRIMITIVA - SELAE\n108 07 SEP 26 - 110 12 SEP 26\n1. 06 09 12 33 34 41\n2. 15 27 37 42 45 48\nREINTEGRO: 5\n42035-0 6,00 EUR`
                     )
                   }
@@ -1966,7 +2035,10 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
                           Resguardo Oficial de SELAE Detectado {parsedTicket.ticketCode ? `(${parsedTicket.ticketCode})` : ''}
                         </p>
                         <p className="text-amber-800 text-xs leading-relaxed">
-                          El código QR de este resguardo contiene el identificador de seguridad del terminal. Los boletos semanales de La Primitiva abarcan los <strong>3 sorteos de la semana (Lunes, Jueves y Sábado)</strong>.
+                          Por motivos de seguridad de Loterías del Estado (SELAE), el código QR impreso en el papel contiene un <strong>código criptográfico del terminal</strong> y no incluye las apuestas ni la fecha en texto libre.
+                          {parsedTicket.game === 'bonoloto'
+                            ? ' Puedes cargar las 8 apuestas del resguardo con un clic o marcarlas en el teclado:'
+                            : ' Puedes cargar las apuestas de ejemplo o introducirlas con el teclado:'}
                         </p>
                       </div>
                     </div>
@@ -1977,7 +2049,13 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
                         className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
                       >
                         <CheckCircle2 className="w-4 h-4 text-indigo-200" />
-                        <span>Cargar Apuestas de este Resguardo (06 09 12 33 34 41 / 15 27 37 42 45 48 - R:5)</span>
+                        <span>
+                          {parsedTicket.game === 'bonoloto'
+                            ? 'Cargar las 8 Apuestas del Resguardo de Bonoloto (08/09/2026 - R:0)'
+                            : parsedTicket.game === 'euromillones'
+                            ? 'Cargar Apuestas del Resguardo de Euromillones'
+                            : 'Cargar Apuestas de este Resguardo (Primitiva 3 Días - R:5)'}
+                        </span>
                       </button>
                       <button
                         type="button"
