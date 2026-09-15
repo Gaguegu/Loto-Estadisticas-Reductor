@@ -82,8 +82,8 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
   const [isEditingBets, setIsEditingBets] = useState<boolean>(false);
   const [editBetsText, setEditBetsText] = useState<string>('');
 
-  // Primary interaction mode: 'keypad' (touch number selection), 'scanner' (camera/file/gallery), 'manual' (text/paste)
-  const [activeMode, setActiveMode] = useState<'scanner' | 'keypad' | 'manual'>('keypad');
+  // Primary interaction mode: 'scanner' (camera/file/gallery), 'keypad' (touch number selection), 'manual' (text/paste)
+  const [activeMode, setActiveMode] = useState<'scanner' | 'keypad' | 'manual'>('scanner');
   const [keypadNumbers, setKeypadNumbers] = useState<number[]>([]);
   const [keypadStars, setKeypadStars] = useState<number[]>([]);
   const [keypadReintegro, setKeypadReintegro] = useState<number>(0);
@@ -144,7 +144,7 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
       setScrutinyResult(null);
       setMultiDrawResult(null);
       setActiveTabDayId('all');
-      setActiveMode('keypad');
+      setActiveMode('scanner');
       enumerateCameras();
     } else {
       stopCamera();
@@ -206,7 +206,7 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
   // Helper with timeout to prevent hanging indefinitely in Android WebViews where permission isn't prompted
   const requestMediaStreamWithTimeout = async (
     constraints: MediaStreamConstraints,
-    timeoutMs = 5000
+    timeoutMs = 4000
   ): Promise<MediaStream> => {
     let timer: any;
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -230,7 +230,7 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
     }
   };
 
-  // Start webcam video stream
+  // Start webcam / mobile video stream
   const startCamera = async (targetDeviceId?: string) => {
     setCameraError(null);
     setCameraNotice(null);
@@ -248,46 +248,69 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
 
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error('El navegador no soporta streaming continuo. Pulsa en «📸 Hacer Foto al Boleto».');
+        throw new Error('Tu entorno no admite streaming directo de vídeo. Abriendo selector de cámara del sistema...');
       }
 
       const deviceIdToUse = targetDeviceId !== undefined ? targetDeviceId : selectedDeviceId;
 
       let stream: MediaStream | null = null;
 
-      // Strategy 1: If deviceId provided, try deviceId first
+      // Strategy 1: If explicit deviceId provided, try deviceId first
       if (deviceIdToUse) {
         try {
           stream = await requestMediaStreamWithTimeout(
             {
-              video: { deviceId: { exact: deviceIdToUse } },
+              video: {
+                deviceId: { exact: deviceIdToUse },
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+              },
               audio: false,
             },
-            4000
+            3500
           );
         } catch (e) {
           console.warn('Exact deviceId failed, falling back to facingMode:', e);
         }
       }
 
-      // Strategy 2: Try environment facing camera (back camera on phones)
+      // Strategy 2: Back camera on mobile phones (facingMode environment) with high resolution for crisp QR codes
       if (!stream) {
         try {
           stream = await requestMediaStreamWithTimeout(
             {
-              video: { facingMode: { ideal: 'environment' } },
+              video: {
+                facingMode: { ideal: 'environment' },
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+              },
               audio: false,
             },
-            4000
+            3500
           );
         } catch (e) {
-          console.warn('FacingMode failed, falling back to basic video: true:', e);
+          console.warn('FacingMode environment failed, trying simpler facingMode:', e);
         }
       }
 
-      // Strategy 3: Simplest constraint { video: true }
+      // Strategy 3: Standard facingMode without resolution constraints
       if (!stream) {
-        stream = await requestMediaStreamWithTimeout({ video: true, audio: false }, 4000);
+        try {
+          stream = await requestMediaStreamWithTimeout(
+            {
+              video: { facingMode: 'environment' },
+              audio: false,
+            },
+            3000
+          );
+        } catch (e) {
+          console.warn('Simple facingMode failed, falling back to basic video: true:', e);
+        }
+      }
+
+      // Strategy 4: Simplest constraint { video: true }
+      if (!stream) {
+        stream = await requestMediaStreamWithTimeout({ video: true, audio: false }, 3000);
       }
 
       if (!stream) {
@@ -301,24 +324,17 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
       // Query device list with labels after permission granted
       await enumerateCameras();
     } catch (err: any) {
-      console.error('Camera access error:', err);
+      console.warn('Live camera stream not available, falling back to direct photo capture:', err);
       setIsStartingCamera(false);
       setIsCameraActive(false);
-      if (err.name === 'TimeoutError' || err.message === 'TIMEOUT_CAMERA_ACCESS') {
-        setCameraError(
-          'La cámara de vídeo continuo no pudo iniciarse en esta app instalada. En teléfonos móviles Android, pulsa en el botón verde superior «📸 Hacer Foto al Boleto» para abrir la cámara de tu teléfono al instante con la máxima resolución.'
-        );
-      } else if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        setCameraError(
-          'Permiso de cámara no concedido en el navegador o app. En móviles, pulsa en el botón verde «📸 Hacer Foto al Boleto» para usar la cámara nativa sin necesidad de permisos WebRTC.'
-        );
-      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-        setCameraError(
-          'La cámara seleccionada no responde o está en uso por otra app. Pulsa en «📸 Hacer Foto al Boleto» para escanear con la cámara de fotos de tu móvil.'
-        );
+
+      // Automatic seamless fallback for APK / WebViews: trigger native camera intent
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|wv/i.test(navigator.userAgent);
+      if (isMobile) {
+        handleOpenCameraCapture();
       } else {
         setCameraError(
-          `Aviso al abrir vídeo continuo: ${err.message || 'La aplicación WebView no permite stream de vídeo continuo'}. Pulsa en «📸 Hacer Foto al Boleto» para enfocar y escanear directamente.`
+          'No se pudo conectar a la cámara web. Puedes seleccionar una foto del resguardo o pulsar "Hacer Foto".'
         );
       }
     }
@@ -411,7 +427,7 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
 
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const code = jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: 'dontInvert',
+        inversionAttempts: 'attemptBoth',
       });
 
       if (code && code.data) {
@@ -472,8 +488,8 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
       const img = new Image();
       img.onload = () => {
         try {
-          // Helper to scan canvas at a given scale for high-resolution smartphone photos
-          const scanAtScale = (scaleFactor: number): string | null => {
+          // Helper to scan canvas at a given scale and optional high-contrast binarization
+          const scanAtScale = (scaleFactor: number, applyContrast = false): string | null => {
             const canvas = document.createElement('canvas');
             const targetW = Math.max(100, Math.round(img.width * scaleFactor));
             const targetH = Math.max(100, Math.round(img.height * scaleFactor));
@@ -483,6 +499,25 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
             if (!ctx) return null;
             ctx.drawImage(img, 0, 0, targetW, targetH);
             const imgData = ctx.getImageData(0, 0, targetW, targetH);
+
+            if (applyContrast) {
+              // High contrast binarization filter to read blurry, low-contrast, or unevenly lit phone photos
+              const d = imgData.data;
+              let sum = 0;
+              const count = d.length / 4;
+              for (let i = 0; i < d.length; i += 4) {
+                sum += (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114);
+              }
+              const avg = sum / count;
+              for (let i = 0; i < d.length; i += 4) {
+                const gray = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+                const val = gray < avg ? 0 : 255;
+                d[i] = val;
+                d[i + 1] = val;
+                d[i + 2] = val;
+              }
+            }
+
             const code = jsQR(imgData.data, imgData.width, imgData.height, {
               inversionAttempts: 'attemptBoth',
             });
@@ -496,19 +531,25 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
           }
 
           // Pass 1: scan at optimal jsQR dimension (~1280px max)
-          let qrData = scanAtScale(primaryScale);
+          let qrData = scanAtScale(primaryScale, false);
 
-          // Pass 2: if not found and original was larger, try slightly higher resolution (1600px)
+          // Pass 2: if not found, try with high contrast filter
+          if (!qrData) {
+            qrData = scanAtScale(primaryScale, true);
+          }
+
+          // Pass 3: if not found and original was larger, try slightly higher resolution (1600px)
           if (!qrData && primaryScale < 1) {
             const secondaryScale = Math.min(1, 1600 / maxDimension);
-            if (secondaryScale !== primaryScale) {
-              qrData = scanAtScale(secondaryScale);
+            qrData = scanAtScale(secondaryScale, false);
+            if (!qrData) {
+              qrData = scanAtScale(secondaryScale, true);
             }
           }
 
-          // Pass 3: if still not found, try original scale if not excessively large
-          if (!qrData && maxDimension <= 2000 && primaryScale !== 1) {
-            qrData = scanAtScale(1);
+          // Pass 4: if still not found, try original scale if within 2200px
+          if (!qrData && maxDimension <= 2200 && primaryScale !== 1) {
+            qrData = scanAtScale(1, false);
           }
 
           setIsProcessingImage(false);
@@ -548,6 +589,19 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
     if (cameraInputRef.current) {
       cameraInputRef.current.value = '';
       cameraInputRef.current.click();
+    }
+  };
+
+  // Unified single smart scan button: Opens camera on mobile devices / APK or starts webcam on PC
+  const handleUnifiedScan = () => {
+    setCameraError(null);
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|wv/i.test(navigator.userAgent);
+    if (isMobile) {
+      // Direct native camera capture works universally in Android APK WebViews, Chrome Mobile, Safari, etc.
+      handleOpenCameraCapture();
+    } else {
+      // In PC / Desktop: Start live webcam video stream directly
+      startCamera();
     }
   };
 
@@ -1083,6 +1137,21 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
             type="button"
             onClick={() => {
               if (parsedTicket) setParsedTicket(null);
+              setActiveMode('scanner');
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+              activeMode === 'scanner' && !parsedTicket
+                ? 'bg-white text-indigo-950 shadow-xs border border-slate-300'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
+            }`}
+          >
+            <Camera className="w-3.5 h-3.5 text-emerald-600" />
+            <span>📸 Escáner Cámara</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (parsedTicket) setParsedTicket(null);
               setActiveMode('keypad');
             }}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer ${
@@ -1093,24 +1162,6 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
           >
             <Grid3X3 className="w-3.5 h-3.5 text-indigo-600" />
             <span>✍️ Teclado Táctil</span>
-            <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 ml-1">
-              Recomendado
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (parsedTicket) setParsedTicket(null);
-              setActiveMode('scanner');
-            }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer ${
-              activeMode === 'scanner' && !parsedTicket
-                ? 'bg-white text-indigo-950 shadow-xs border border-slate-300'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
-            }`}
-          >
-            <Camera className="w-3.5 h-3.5 text-emerald-600" />
-            <span>📸 Foto / Escáner QR</span>
           </button>
           <button
             type="button"
@@ -1158,17 +1209,17 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
         {/* Modal Scrollable Body */}
         <div ref={scrollContainerRef} className="p-3 sm:p-5 overflow-y-auto flex-1 space-y-4 bg-slate-100/50">
           
-          {/* TAB 1: SCANNER & PHOTO INPUT */}
+          {/* TAB 1: SCANNER & PHOTO INPUT - SIMPLIFIED TO ONE DIRECT SCAN BUTTON */}
           {!parsedTicket && activeMode === 'scanner' && (
-            <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-4">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6 shadow-xs space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
-                    <Camera className="w-4 h-4 text-indigo-600" />
-                    Comprobar con Foto o Código QR
+                  <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                    <Camera className="w-5 h-5 text-indigo-600" />
+                    Escanear Boleto con la Cámara
                   </h3>
-                  <p className="text-xs text-slate-500">
-                    Toma una foto con tu móvil al resguardo oficial o usa la cámara web para escanear el QR.
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Pulsa el botón para abrir la cámara y enfocar el código QR de tu boleto.
                   </p>
                 </div>
 
@@ -1185,157 +1236,63 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
                 )}
               </div>
 
-              {/* Action Buttons: 2 Big Mobile-Friendly Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                {/* Primary Button: Mobile Camera Intent */}
+              {/* ONE SINGLE MAIN SCAN BUTTON */}
+              <div className="pt-1">
                 <button
                   type="button"
-                  id="mobile-camera-capture-trigger"
-                  onClick={handleOpenCameraCapture}
-                  className="flex items-center gap-3 p-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-sm transition active:scale-98 text-left cursor-pointer border border-emerald-500/50 group w-full"
+                  id="unified-scanner-main-btn"
+                  onClick={handleUnifiedScan}
+                  className="w-full flex items-center justify-center gap-3 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white shadow-md hover:shadow-lg transition-all active:scale-98 cursor-pointer border border-emerald-500/40 group"
                 >
-                  <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
-                    <Camera className="w-6 h-6 text-white" />
+                  <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center shrink-0 group-hover:scale-110 transition">
+                    <Camera className="w-7 h-7 text-white" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-black text-sm text-white">📸 Hacer Foto al Boleto</span>
-                      <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-white/25 text-white">Móvil</span>
-                    </div>
-                    <p className="text-[11px] text-emerald-100 leading-tight mt-0.5">
-                      Abre la cámara de tu teléfono al instante para enfocar el resguardo
-                    </p>
-                  </div>
-                </button>
-
-                {/* Secondary Button: Gallery Picker */}
-                <button
-                  type="button"
-                  id="gallery-file-picker-trigger"
-                  onClick={handleOpenGalleryPicker}
-                  className="flex items-center gap-3 p-3.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-300 shadow-2xs transition active:scale-98 text-left cursor-pointer group w-full"
-                >
-                  <div className="w-11 h-11 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
-                    <ImageIcon className="w-6 h-6 text-indigo-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-bold text-sm text-slate-900">🖼️ Elegir de la Galería</span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 leading-tight mt-0.5">
-                      Selecciona una foto ya guardada en tu teléfono o archivo de tu PC
-                    </p>
+                  <div className="text-left">
+                    <span className="block font-black text-base sm:text-lg text-white leading-tight">
+                      📸 Abrir Cámara y Escanear
+                    </span>
+                    <span className="block text-xs text-emerald-100 mt-0.5 font-medium">
+                      Enfoca el código QR de tu resguardo oficial
+                    </span>
                   </div>
                 </button>
               </div>
 
-              {/* Secondary Actions Bar */}
-              <div className="flex items-center justify-between gap-2 flex-wrap pt-2 border-t border-slate-100">
+              {/* Subtle Alternative Options (Direct Video, Gallery & Demo) */}
+              <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 flex-wrap text-xs">
                 <div className="flex items-center gap-2 flex-wrap">
-                  {!isCameraActive ? (
-                    isStartingCamera ? (
-                      <div className="inline-flex items-center gap-1">
-                        <button
-                          disabled
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-100 text-indigo-800 text-xs font-bold transition cursor-wait"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-600" />
-                          <span>Conectando cámara en directo...</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsStartingCamera(false);
-                            stopCamera();
-                          }}
-                          className="p-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold transition cursor-pointer"
-                          title="Cancelar"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => startCamera()}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold border border-indigo-200 transition cursor-pointer shadow-2xs active:scale-95"
-                        title="Activar escáner de vídeo continuo en directo (Cámara trasera o Webcam)"
-                      >
-                        <Video className="w-3.5 h-3.5 text-indigo-600" />
-                        <span>Escanear en Directo (Vídeo)</span>
-                      </button>
-                    )
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={stopCamera}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition shadow-xs cursor-pointer"
-                    >
-                      <CameraOff className="w-3.5 h-3.5" />
-                      <span>Detener Cámara</span>
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={handleOpenGalleryPicker}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition cursor-pointer"
+                  >
+                    <ImageIcon className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Elegir foto de galería</span>
+                  </button>
 
                   <button
                     type="button"
-                    onClick={() => setActiveMode('keypad')}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-800 text-xs font-bold border border-indigo-200 transition cursor-pointer"
+                    onClick={() => {
+                      setCameraError(null);
+                      startCamera();
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium border border-indigo-200 transition cursor-pointer"
+                    title="Iniciar streaming de vídeo continuo (ideal para PC con webcam o navegadores compatibles)"
                   >
-                    <Grid3X3 className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>Teclado Táctil de Números</span>
+                    <Video className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Vídeo en directo</span>
                   </button>
                 </div>
 
                 <button
                   type="button"
                   onClick={handleLoadDemoTicket}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-semibold border border-amber-200 transition cursor-pointer ml-auto"
-                  title="Cargar un boleto de prueba para comprobar inmediatamente"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 font-medium border border-amber-200/80 transition cursor-pointer ml-auto"
                 >
-                  <Sparkles className="w-3 h-3 text-amber-600" />
-                  <span>Probar Boleto Demo</span>
+                  <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Probar boleto muestra</span>
                 </button>
               </div>
-
-              {/* Camera device selection dropdown (if devices enumerated) */}
-              {videoDevices.length > 0 ? (
-                <div className="w-full flex items-center gap-2 pt-1 border-t border-slate-100 flex-wrap text-xs">
-                  <span className="font-semibold text-slate-600 flex items-center gap-1">
-                    <Video className="w-3.5 h-3.5 text-indigo-600" /> Dispositivo:
-                  </span>
-                  <select
-                    value={selectedDeviceId}
-                    onChange={(e) => {
-                      const devId = e.target.value;
-                      setSelectedDeviceId(devId);
-                      if (isCameraActive) {
-                        startCamera(devId);
-                      }
-                    }}
-                    className="px-2 py-1 rounded-lg bg-white border border-slate-300 font-medium text-slate-800 text-xs shadow-2xs focus:ring-2 focus:ring-indigo-500 focus:outline-none max-w-sm truncate"
-                  >
-                    {videoDevices.map((dev, idx) => (
-                      <option key={dev.deviceId || idx} value={dev.deviceId}>
-                        {dev.label || `Cámara ${idx + 1}`}
-                      </option>
-                    ))}
-                  </select>
-                  {isCameraActive && (
-                    <button
-                      onClick={() => startCamera(selectedDeviceId)}
-                      className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold underline cursor-pointer"
-                    >
-                      Cambiar
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <div className="w-full pt-1 border-t border-slate-100 flex items-center justify-between gap-2 text-[11px] text-slate-500 flex-wrap">
-                  <span className="flex items-center gap-1">
-                    💡 En móviles: Pulsa en <strong className="text-emerald-700">«📸 Hacer Foto al Boleto»</strong> para abrir la cámara nativa de tu teléfono al instante.
-                  </span>
-                </div>
-              )}
 
               {/* Image processing state indicator */}
               {isProcessingImage && (
@@ -1344,13 +1301,13 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
                   <div className="flex-1">
                     <p className="font-bold text-indigo-900">Analizando foto del boleto...</p>
                     <p className="text-slate-600 text-[11px]">
-                      Buscando código QR y decodificando números del resguardo.
+                      Detectando código QR y comprobando apuestas con el sorteo oficial.
                     </p>
                   </div>
                 </div>
               )}
 
-              {/* Live Camera Viewport */}
+              {/* Live Camera Viewport (Active in PC or if WebRTC is supported) */}
               {isCameraActive && (
                 <div className="relative rounded-2xl overflow-hidden bg-black border-2 border-indigo-500/50 shadow-inner flex flex-col items-center justify-center min-h-[240px] max-h-[360px]">
                   <video
@@ -1373,21 +1330,39 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
                     </div>
                   </div>
 
-                  <div className="absolute bottom-3 bg-black/75 backdrop-blur-xs text-white text-xs px-3 py-1 rounded-full font-medium flex items-center gap-1.5">
+                  <div className="absolute bottom-3 bg-black/75 backdrop-blur-xs text-white text-xs px-3 py-1.5 rounded-full font-medium flex items-center gap-2">
                     <RefreshCw className="w-3 h-3 animate-spin text-emerald-400" />
                     <span>Enfoca el código QR dentro del recuadro...</span>
+                    <button
+                      type="button"
+                      onClick={stopCamera}
+                      className="ml-2 bg-rose-600 hover:bg-rose-700 text-white text-[11px] px-2 py-0.5 rounded-md font-bold cursor-pointer"
+                    >
+                      Cerrar
+                    </button>
                   </div>
                 </div>
               )}
 
-              {/* Camera Error Banner with Direct Recovery Actions */}
+              {/* Camera Notice/Error Banner if permissions fail */}
               {cameraError && (
                 <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-950 flex items-start gap-2.5 shadow-2xs">
                   <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                   <div className="flex-1 space-y-2">
-                    <p className="font-bold text-amber-950">Aviso sobre el acceso a la cámara</p>
+                    <p className="font-bold text-amber-950">Aviso sobre la cámara</p>
                     <p className="leading-relaxed text-slate-800">{cameraError}</p>
                     <div className="flex items-center gap-2 flex-wrap pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCameraError(null);
+                          handleOpenCameraCapture();
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer shadow-xs active:scale-95 transition"
+                      >
+                        <Camera className="w-3.5 h-3.5" />
+                        <span>📸 Hacer Foto</span>
+                      </button>
                       <button
                         type="button"
                         onClick={() => {
@@ -1397,22 +1372,8 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs cursor-pointer shadow-xs active:scale-95 transition"
                       >
                         <Grid3X3 className="w-3.5 h-3.5" />
-                        <span>✍️ Usar Teclado Táctil (Recomendado)</span>
+                        <span>✍️ Usar Teclado Táctil</span>
                       </button>
-                      <label
-                        htmlFor="qr-camera-direct-input"
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer shadow-xs active:scale-95 transition"
-                      >
-                        <Camera className="w-3.5 h-3.5" />
-                        <span>📸 Hacer Foto</span>
-                      </label>
-                      <label
-                        htmlFor="qr-gallery-direct-input"
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 font-bold text-xs cursor-pointer shadow-2xs active:scale-95 transition"
-                      >
-                        <ImageIcon className="w-3.5 h-3.5 text-indigo-600" />
-                        <span>🖼️ Galería</span>
-                      </label>
                     </div>
                   </div>
                 </div>
