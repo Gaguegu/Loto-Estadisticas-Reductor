@@ -41,7 +41,7 @@ const SPANISH_DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Vie
 export function getAllOfficialDatesForGame(
   game: GameType,
   maxDate: string,
-  minDate = '2026-08-01'
+  minDate = '2026-01-01'
 ): string[] {
   const dates: string[] = [];
   const allowedDays = OFFICIAL_DRAW_DAYS[game];
@@ -141,8 +141,8 @@ export function getPendingDrawDates(game: GameType, existingDraws: LotteryDraw[]
     (d) => d.game === game && d.date <= maxAllowedDateStr && !existingDates.has(d.date)
   ).map((d) => d.date);
 
-  // Check all celebrated official days between Aug 1 and today/yesterday
-  const allOfficialDates = getAllOfficialDatesForGame(game, maxAllowedDateStr, '2026-08-01');
+  // Check all celebrated official days from Jan 1 and today/yesterday
+  const allOfficialDates = getAllOfficialDatesForGame(game, maxAllowedDateStr, '2026-01-01');
   const missingOfficial = allOfficialDates.filter((date) => !existingDates.has(date));
 
   return Array.from(new Set([...missingSeeds, ...missingOfficial])).sort((a, b) => b.localeCompare(a));
@@ -232,7 +232,7 @@ export function synchronizeDatabase(currentDraws: LotteryDraw[]): SyncResult {
   const games: GameType[] = ['primitiva', 'bonoloto', 'euromillones'];
   for (const g of games) {
     const maxAllowed = getMaxCelebratedDateForGame(g);
-    const officialDates = getAllOfficialDatesForGame(g, maxAllowed, '2026-08-01');
+    const officialDates = getAllOfficialDatesForGame(g, maxAllowed, '2026-01-01');
 
     for (const date of officialDates) {
       const key = `${g}-${date}`;
