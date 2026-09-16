@@ -325,7 +325,7 @@ export const Header: React.FC<HeaderProps> = ({
                 title="Actualización pendiente de la aplicación. Pulsa para aplicar"
               >
                 <RefreshCw className="w-3 h-3 text-white" />
-                <span>Actualizar</span>
+                <span>Actualizar App</span>
               </button>
             )}
           </div>

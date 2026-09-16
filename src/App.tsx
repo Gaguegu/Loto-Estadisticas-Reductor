@@ -261,14 +261,23 @@ export default function App() {
     setReductionResult(initialResult);
   }, [activeGame, numberStats, starStats]);
 
-  // Handlers for toggling numbers
+  // Handlers for toggling numbers (sorted by frequency: most drawn first)
   const handleToggleNumber = (num: number) => {
     const maxPicks = activeGame === 'euromillones' ? 10 : 12;
     if (selectedNumbers.includes(num)) {
       setSelectedNumbers(selectedNumbers.filter((n) => n !== num));
     } else {
       if (selectedNumbers.length < maxPicks) {
-        setSelectedNumbers([...selectedNumbers, num]);
+        const next = [...selectedNumbers, num];
+        const countMap = new Map<number, number>();
+        numberStats.forEach((s) => countMap.set(s.number, s.totalCount));
+        next.sort((a, b) => {
+          const countA = countMap.get(a) ?? 0;
+          const countB = countMap.get(b) ?? 0;
+          if (countB !== countA) return countB - countA;
+          return a - b;
+        });
+        setSelectedNumbers(next);
       }
     }
   };
@@ -278,7 +287,16 @@ export default function App() {
       setSelectedStars(selectedStars.filter((s) => s !== star));
     } else {
       if (selectedStars.length < 5) {
-        setSelectedStars([...selectedStars, star]);
+        const next = [...selectedStars, star];
+        const countMap = new Map<number, number>();
+        starStats.forEach((s) => countMap.set(s.number, s.totalCount));
+        next.sort((a, b) => {
+          const countA = countMap.get(a) ?? 0;
+          const countB = countMap.get(b) ?? 0;
+          if (countB !== countA) return countB - countA;
+          return a - b;
+        });
+        setSelectedStars(next);
       }
     }
   };
@@ -819,7 +837,7 @@ export default function App() {
               title="Comprobar si hay versiones más recientes en GitHub"
             >
               <RefreshCw className={`w-3 h-3 ${isCheckingAppUpdate ? 'animate-spin' : ''}`} />
-              <span>{isCheckingAppUpdate ? 'Comprobando...' : 'Comprobar actualizaciones'}</span>
+              <span>{isCheckingAppUpdate ? 'Comprobando...' : 'Actualizar App'}</span>
             </button>
             <span>&bull;</span>
             <button

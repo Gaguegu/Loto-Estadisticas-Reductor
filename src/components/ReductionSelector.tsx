@@ -384,6 +384,25 @@ export const ReductionSelector: React.FC<ReductionSelectorProps> = ({
             </strong>{' '}
             (mín. {minRequired}, máx. {maxAllowed})
           </div>
+          {selectedNumbers.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1 pt-1">
+              <span className="text-[10px] text-slate-500 font-medium mr-1">Ordenados por más apariciones:</span>
+              {selectedNumbers.map((num) => (
+                <span
+                  key={num}
+                  className={`inline-flex items-center justify-center w-6 h-6 rounded-full font-mono text-xs font-black shadow-2xs border ${
+                    game === 'primitiva'
+                      ? 'bg-emerald-600 text-white border-emerald-500'
+                      : game === 'bonoloto'
+                      ? 'bg-blue-600 text-white border-blue-500'
+                      : 'bg-amber-400 text-slate-950 border-amber-300'
+                  }`}
+                >
+                  {num}
+                </span>
+              ))}
+            </div>
+          )}
           {game === 'euromillones' && (
             <div>
               <span className="font-semibold text-slate-800">Estrellas elegidas:</span>{' '}
@@ -397,6 +416,19 @@ export const ReductionSelector: React.FC<ReductionSelectorProps> = ({
                 {selectedStars.length}
               </strong>{' '}
               (mín. 2, máx. 5)
+            </div>
+          )}
+          {game === 'euromillones' && selectedStars.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1 pt-0.5">
+              <span className="text-[10px] text-amber-800 font-medium mr-1">Estrellas:</span>
+              {selectedStars.map((star) => (
+                <span
+                  key={star}
+                  className="inline-flex items-center justify-center px-1.5 py-0.5 rounded-full font-mono text-xs font-black bg-amber-400 text-slate-950 border border-amber-300 shadow-2xs"
+                >
+                  ★ {star}
+                </span>
+              ))}
             </div>
           )}
           {!isNumbersValid && (

@@ -49,7 +49,7 @@ export const PeriodFilter: React.FC<PeriodFilterProps> = ({
   const handleSelectDay = (day: string) => {
     onChangeFilter({
       ...filter,
-      selectedDay: day,
+      selectedDay: currentDay === day ? 'all' : day,
     });
   };
 

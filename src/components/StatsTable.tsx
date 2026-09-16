@@ -680,7 +680,7 @@ export const StatsTable: React.FC<StatsTableProps> = ({
                 <th
                   onClick={() => onSelectDay && onSelectDay('all')}
                   title="Click para ver el total de todos los días"
-                  className={`py-3 px-3 text-center border-x font-bold transition cursor-pointer ${
+                  className={`py-3 px-3 text-center border-x font-bold transition cursor-pointer select-none ${
                     !selectedDay || selectedDay === 'all'
                       ? game === 'primitiva'
                         ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
@@ -699,7 +699,7 @@ export const StatsTable: React.FC<StatsTableProps> = ({
                       key={day}
                       onClick={() => onSelectDay && onSelectDay(isDayActive ? 'all' : day)}
                       title={`Click para filtrar solo por sorteos del ${day}`}
-                      className={`py-3 px-2 text-center font-semibold transition cursor-pointer ${
+                      className={`py-3 px-2 text-center font-semibold transition cursor-pointer select-none ${
                         isDayActive
                           ? game === 'primitiva'
                             ? 'bg-emerald-600 text-white font-black shadow-xs'
@@ -949,7 +949,7 @@ export const StatsTable: React.FC<StatsTableProps> = ({
                 <th
                   onClick={() => onSelectDay && onSelectDay('all')}
                   title="Click para ver el total de todos los días"
-                  className={`py-3 px-3 text-center border-x font-black transition cursor-pointer ${
+                  className={`py-3 px-3 text-center border-x font-black transition cursor-pointer select-none ${
                     !selectedDay || selectedDay === 'all'
                       ? 'bg-amber-400 text-slate-950 border-amber-400 shadow-xs'
                       : 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100'
@@ -964,7 +964,7 @@ export const StatsTable: React.FC<StatsTableProps> = ({
                       key={day}
                       onClick={() => onSelectDay && onSelectDay(isDayActive ? 'all' : day)}
                       title={`Click para filtrar solo por sorteos del ${day}`}
-                      className={`py-3 px-2 text-center font-semibold transition cursor-pointer ${
+                      className={`py-3 px-2 text-center font-semibold transition cursor-pointer select-none ${
                         isDayActive
                           ? 'bg-amber-400 text-slate-950 font-black shadow-xs'
                           : 'text-amber-900 hover:bg-amber-100/80'
