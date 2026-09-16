@@ -537,13 +537,15 @@ export const DrawsHistoryModal: React.FC<DrawsHistoryModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-3 bg-slate-100 border-t border-slate-200 flex items-center justify-between text-xs">
-          <span className="text-slate-500 text-[11px]">
+        <div className="p-3 pt-3 pb-[max(2rem,calc(env(safe-area-inset-bottom,0px)+1.25rem))] sm:pb-3 bg-slate-100 border-t border-slate-200 flex items-center justify-between text-xs">
+          <span className="text-slate-500 text-[11px] hidden sm:inline">
             Total en base de datos: <strong>{gameDraws.length}</strong> sorteos de {game}
           </span>
           <button
+            type="button"
             onClick={onClose}
-            className="px-4 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition"
+            onTouchEnd={onClose}
+            className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-900 text-white font-bold transition ml-auto"
           >
             Cerrar
           </button>

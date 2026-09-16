@@ -1,7 +1,7 @@
 import React from 'react';
 import { GameType } from '../types';
 import { PWAInstallButton } from './PWAInstallButton';
-import { Database, Calendar, RefreshCw, FolderHeart, BookOpen, QrCode } from 'lucide-react';
+import { Database, Calendar, RefreshCw, FolderHeart, BookOpen, QrCode, ArrowUpCircle } from 'lucide-react';
 import ansamaLogo from '../assets/images/ansama_lottery_logo_1788692658153.jpg';
 import { CURRENT_APP_VERSION } from '../config/version';
 
@@ -157,8 +157,8 @@ export const Header: React.FC<HeaderProps> = ({
               } ${isSyncing ? 'opacity-75 cursor-wait' : ''}`}
               title={
                 missingDrawsCount > 0
-                  ? `Hay ${missingDrawsCount} sorteos oficiales pendientes. Pulsa para actualizar la base de datos.`
-                  : 'Actualizar base de datos con los últimos sorteos oficiales de Loterías y Apuestas del Estado'
+                  ? `Hay ${missingDrawsCount} sorteos oficiales pendientes. Pulsa para actualizar la base de datos de sorteos.`
+                  : 'Actualizar sorteos oficiales de Loterías y Apuestas del Estado en la base de datos'
               }
             >
               <RefreshCw
@@ -170,7 +170,7 @@ export const Header: React.FC<HeaderProps> = ({
                     : 'text-white'
                 }`}
               />
-              <span>{isSyncing ? 'Actualizando BD...' : 'Actualizar BD'}</span>
+              <span>{isSyncing ? 'Actualizando Sorteos...' : 'Actualizar Sorteos'}</span>
               {missingDrawsCount > 0 && !isSyncing && (
                 <span
                   className={`font-black text-[10px] px-1.5 py-0.5 rounded-full shadow-xs ${
@@ -243,10 +243,10 @@ export const Header: React.FC<HeaderProps> = ({
                     ? 'bg-slate-950/15 hover:bg-slate-950/25 border-slate-950/30 text-slate-950 ring-1 ring-amber-400/40'
                     : 'bg-white/20 hover:bg-white/30 border-white/35 text-white ring-1 ring-white/30'
                 }`}
-                title="Lector de QR para escanear boletos oficiales y comprobar premios"
+                title="Escanear boletos oficiales con cámara o QR y comprobar premios"
               >
                 <QrCode className="w-3.5 h-3.5 text-amber-300" />
-                <span>Comprobar / QR</span>
+                <span>Escanear</span>
               </button>
             )}
 
@@ -280,25 +280,27 @@ export const Header: React.FC<HeaderProps> = ({
                 }`}
                 title={
                   hasAppUpdate
-                    ? 'Hay una actualización pendiente. Clic para actualizar ahora'
-                    : 'Comprobar si hay actualizaciones'
+                    ? 'Hay una nueva versión de la aplicación lista. Clic para aplicar la actualización.'
+                    : 'Comprobar si hay nueva versión de la aplicación web'
                 }
               >
-                <RefreshCw
-                  className={`w-3.5 h-3.5 ${
-                    isCheckingAppUpdate
-                      ? 'animate-spin text-amber-300'
-                      : hasAppUpdate
-                      ? 'text-white'
-                      : 'text-amber-300'
-                  }`}
-                />
+                {hasAppUpdate ? (
+                  <ArrowUpCircle className="w-3.5 h-3.5 text-white animate-bounce" />
+                ) : (
+                  <ArrowUpCircle
+                    className={`w-3.5 h-3.5 ${
+                      isCheckingAppUpdate
+                        ? 'animate-spin text-amber-300'
+                        : 'text-amber-300'
+                    }`}
+                  />
+                )}
                 <span>
                   {isCheckingAppUpdate
                     ? 'Buscando...'
                     : hasAppUpdate
-                    ? 'Actualizar'
-                    : 'Actualizar'}
+                    ? 'Nueva Versión'
+                    : 'Versión App'}
                 </span>
                 {hasAppUpdate && (
                   <span className="flex h-2 w-2 relative">
@@ -331,7 +333,7 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Mobile Action Bar: 100% visible, 3-column grid, never overflows to the right */}
         <div className="grid grid-cols-3 gap-1.5 pb-2.5 md:hidden">
-          {/* 1. Actualizar BD */}
+          {/* 1. Actualizar Sorteos */}
           <button
             id="mobile-sync-db-btn"
             onClick={onSyncDatabase}
@@ -341,7 +343,7 @@ export const Header: React.FC<HeaderProps> = ({
                 ? 'bg-slate-950/15 hover:bg-slate-950/25 border-slate-950/30 text-slate-950'
                 : 'bg-white/20 hover:bg-white/30 border-white/35 text-white'
             } ${isSyncing ? 'opacity-75 cursor-wait' : ''}`}
-            title="Actualizar base de datos con los últimos sorteos"
+            title="Actualizar sorteos oficiales en la base de datos"
           >
             <RefreshCw
               className={`w-3.5 h-3.5 shrink-0 ${
@@ -353,7 +355,7 @@ export const Header: React.FC<HeaderProps> = ({
               }`}
             />
             <span className="truncate">
-              {isSyncing ? 'Cargando...' : 'Actualizar BD'}
+              {isSyncing ? 'Cargando...' : 'Sorteos (BD)'}
             </span>
             {missingDrawsCount > 0 && !isSyncing && (
               <span
@@ -416,20 +418,20 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </button>
 
-          {/* 4. Lector QR Boletos */}
+          {/* 4. Escanear Boletos */}
           {onOpenQRScanner && (
             <button
               id="mobile-qr-scanner-btn"
               onClick={onOpenQRScanner}
               className={`inline-flex items-center justify-center gap-1 px-2 py-2 rounded-xl text-[11px] font-bold border transition active:scale-95 shadow-xs cursor-pointer ${
-                isEuro
-                  ? 'bg-slate-950/15 hover:bg-slate-950/25 border-slate-950/30 text-slate-950 ring-1 ring-amber-400/40'
-                  : 'bg-white/20 hover:bg-white/30 border-white/35 text-white ring-1 ring-white/30'
-              }`}
-              title="Lector QR de boletos oficiales"
+              isEuro
+                ? 'bg-slate-950/15 hover:bg-slate-950/25 border-slate-950/30 text-slate-950 ring-1 ring-amber-400/40'
+                : 'bg-white/20 hover:bg-white/30 border-white/35 text-white ring-1 ring-white/30'
+            }`}
+              title="Escanear boletos oficiales con cámara o QR"
             >
               <QrCode className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-              <span className="truncate">Comprobar</span>
+              <span className="truncate">Escanear</span>
             </button>
           )}
 
@@ -448,7 +450,7 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="truncate">Guía PDF</span>
           </button>
 
-          {/* 5. Actualizar App (GitHub/PWA) */}
+          {/* 6. Versión App (GitHub/PWA) */}
           {(onApplyUpdate || onCheckUpdates) && (
             <button
               id="mobile-app-update-btn"
@@ -461,19 +463,21 @@ export const Header: React.FC<HeaderProps> = ({
                   ? 'bg-slate-950/10 hover:bg-slate-950/20 border-slate-950/25 text-slate-950'
                   : 'bg-white/15 hover:bg-white/25 border-white/30 text-white'
               }`}
-              title="Actualizar aplicación"
+              title="Comprobar o actualizar versión de la app"
             >
-              <RefreshCw
-                className={`w-3.5 h-3.5 shrink-0 ${
-                  isCheckingAppUpdate
-                    ? 'animate-spin text-amber-300'
-                    : hasAppUpdate
-                    ? 'text-white'
-                    : 'text-amber-300'
-                }`}
-              />
+              {hasAppUpdate ? (
+                <ArrowUpCircle className="w-3.5 h-3.5 shrink-0 text-white animate-bounce" />
+              ) : (
+                <ArrowUpCircle
+                  className={`w-3.5 h-3.5 shrink-0 ${
+                    isCheckingAppUpdate
+                      ? 'animate-spin text-amber-300'
+                      : 'text-amber-300'
+                  }`}
+                />
+              )}
               <span className="truncate">
-                {isCheckingAppUpdate ? 'Buscando...' : hasAppUpdate ? '¡Actualizar!' : 'Actualizar App'}
+                {isCheckingAppUpdate ? 'Buscando...' : hasAppUpdate ? '¡Actualizar!' : 'Versión App'}
               </span>
             </button>
           )}

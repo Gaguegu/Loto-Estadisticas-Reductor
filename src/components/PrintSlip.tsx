@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { ReductionResult } from '../types';
 import { REDUCTION_PLANS } from '../utils/reductions';
+import { generateTicketQRText, generateTicketQRCodeDataUrl } from '../utils/qrTicketChecker';
 import ansamaLogo from '../assets/images/ansama_lottery_logo_1788692658153.jpg';
 
 interface PrintSlipProps {
@@ -22,6 +23,45 @@ export const PrintSlip: React.FC<PrintSlipProps> = ({ result }) => {
     hour: '2-digit',
     minute: '2-digit',
   });
+
+  const [boletoQRs, setBoletoQRs] = useState<Record<number, string>>({});
+
+  useEffect(() => {
+    let isCancelled = false;
+    const totalBoletos = Math.ceil(result.columns.length / 8);
+
+    const generateQRs = async () => {
+      const qrs: Record<number, string> = {};
+      for (let bIdx = 0; bIdx < totalBoletos; bIdx++) {
+        const startIdx = bIdx * 8;
+        const endIdx = Math.min(startIdx + 8, result.columns.length);
+        const boletoCols = result.columns.slice(startIdx, endIdx);
+        const firstR = boletoCols[0]?.reintegro;
+        const isUniformR = boletoCols.every((c) => c.reintegro === firstR);
+        const boletoR = isUniformR ? firstR : undefined;
+
+        const qrText = generateTicketQRText(result.game, boletoCols, {
+          reintegro: boletoR,
+          title: `BOLETO ${bIdx + 1} (${startIdx + 1}-${endIdx})`,
+        });
+
+        const dataUrl = await generateTicketQRCodeDataUrl(qrText);
+        if (dataUrl) {
+          qrs[bIdx] = dataUrl;
+        }
+      }
+
+      if (!isCancelled) {
+        setBoletoQRs(qrs);
+      }
+    };
+
+    generateQRs();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [result]);
 
   return (
     <div className="print-only hidden print:block p-6 text-slate-900 bg-white font-sans max-w-2xl mx-auto">
@@ -104,30 +144,44 @@ export const PrintSlip: React.FC<PrintSlipProps> = ({ result }) => {
                   </span>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs font-mono">
-                {boletoCols.map((col) => (
-                  <div
-                    key={col.id}
-                    className="flex items-center justify-between py-0.5 px-2 border-b border-slate-200/70"
-                  >
-                    <span className="font-bold text-slate-600 text-[11px]">
-                      C{col.id.toString().padStart(2, '0')}:
-                    </span>
-                    <span className="font-bold text-slate-900 tracking-wider">
-                      {col.numbers.map((n) => n.toString().padStart(2, '0')).join(' ')}
-                    </span>
-                    {col.stars && col.stars.length > 0 && (
-                      <span className="text-amber-700 font-bold ml-1 text-[11px]">
-                        ★ {col.stars.join(' ')}
+              <div className="flex items-center gap-3">
+                <div className="flex-1 grid grid-cols-2 gap-x-3 gap-y-1 text-xs font-mono">
+                  {boletoCols.map((col) => (
+                    <div
+                      key={col.id}
+                      className="flex items-center justify-between py-0.5 px-2 border-b border-slate-200/70"
+                    >
+                      <span className="font-bold text-slate-600 text-[11px]">
+                        C{col.id.toString().padStart(2, '0')}:
                       </span>
-                    )}
-                    {result.game !== 'euromillones' && !isUniformR && col.reintegro !== undefined && (
-                      <span className="text-blue-700 font-bold ml-1 text-[11px]">
-                        R:{col.reintegro}
+                      <span className="font-bold text-slate-900 tracking-wider">
+                        {col.numbers.map((n) => n.toString().padStart(2, '0')).join(' ')}
                       </span>
-                    )}
+                      {col.stars && col.stars.length > 0 && (
+                        <span className="text-amber-700 font-bold ml-1 text-[11px]">
+                          ★ {col.stars.join(' ')}
+                        </span>
+                      )}
+                      {result.game !== 'euromillones' && !isUniformR && col.reintegro !== undefined && (
+                        <span className="text-blue-700 font-bold ml-1 text-[11px]">
+                          R:{col.reintegro}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {boletoQRs[boletoIdx] && (
+                  <div className="flex flex-col items-center justify-center shrink-0 pl-3 border-l border-slate-200 text-center">
+                    <img
+                      src={boletoQRs[boletoIdx]}
+                      alt={`QR Boleto ${boletoNum}`}
+                      className="w-18 h-18 object-contain border border-slate-300 rounded bg-white p-0.5"
+                    />
+                    <span className="text-[8px] font-bold text-slate-500 mt-0.5 uppercase tracking-tighter">
+                      Escanear QR
+                    </span>
                   </div>
-                ))}
+                )}
               </div>
             </div>
           );

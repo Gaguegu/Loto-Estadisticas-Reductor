@@ -1,4 +1,5 @@
 import { GameType, LotteryDraw } from '../types';
+import QRCode from 'qrcode';
 
 export interface ScannedBet {
   index: number;
@@ -717,3 +718,65 @@ export function scrutinizeTicket(
     bets: betsResult,
   };
 }
+
+/**
+ * Generates the standardized QR text payload for a group of bets (e.g. an official 8-bet slip).
+ * This format is 100% compatible with parseTicketQR.
+ */
+export function generateTicketQRText(
+  game: GameType,
+  bets: { id?: number; numbers: number[]; stars?: number[]; reintegro?: number }[],
+  options?: { reintegro?: number; date?: string; title?: string }
+): string {
+  const gameName =
+    game === 'primitiva'
+      ? 'LA PRIMITIVA - SELAE'
+      : game === 'bonoloto'
+      ? 'BONOLOTO - SELAE'
+      : 'EUROMILLONES - SELAE';
+
+  const lines: string[] = [gameName];
+  if (options?.title) {
+    lines.push(options.title);
+  }
+  if (options?.date) {
+    lines.push(`FECHA: ${options.date}`);
+  }
+
+  bets.forEach((bet, idx) => {
+    const nums = bet.numbers.map((n) => n.toString().padStart(2, '0')).join(' ');
+    if (game === 'euromillones' && bet.stars && bet.stars.length > 0) {
+      const stars = bet.stars.map((s) => s.toString().padStart(2, '0')).join(' ');
+      lines.push(`${idx + 1}. ${nums} + ${stars}`);
+    } else {
+      lines.push(`${idx + 1}. ${nums}`);
+    }
+  });
+
+  const r = options?.reintegro ?? bets.find((b) => b.reintegro !== undefined)?.reintegro;
+  if (r !== undefined && game !== 'euromillones') {
+    lines.push(`REINTEGRO: ${r}`);
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Generates a PNG data URL for the given QR code text.
+ */
+export async function generateTicketQRCodeDataUrl(text: string): Promise<string> {
+  try {
+    return await QRCode.toDataURL(text, {
+      margin: 1,
+      width: 240,
+      color: {
+        dark: '#0f172a',
+        light: '#ffffff',
+      },
+    });
+  } catch (err) {
+    console.error('Error generando código QR:', err);
+    return '';
+  }
+}
+

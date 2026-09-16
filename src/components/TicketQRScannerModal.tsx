@@ -984,39 +984,20 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
     setIsEditingBets(false);
   };
 
-  // Demo test ticket generator to test immediately without needing a physical paper slip
-  const handleLoadDemoTicket = () => {
-    let demoText = '';
-    if (selectedGame === 'primitiva') {
-      demoText = `LA PRIMITIVA - SELAE
-108 07 SEP 26 - 110 12 SEP 26
-1. 06 09 12 33 34 41
-2. 15 27 37 42 45 48
-REINTEGRO: 5
-42035-0 6,00 EUR`;
-    } else if (selectedGame === 'bonoloto') {
-      demoText = `BONOLOTO - SELAE
-MODALIDAD: SEMANAL (LUNES A DOMINGO)
-1. 03 04 12 23 37 48
-2. 07 18 25 31 40 49
-REINTEGRO: 8
-7,00 EUR`;
-    } else {
-      demoText = `EUROMILLONES - SELAE
-MODALIDAD: SEMANAL (MARTES Y VIERNES)
-1. 01 07 15 39 50 + 01 11
-2. 13 17 33 35 39 + 07 12
-10,00 EUR`;
-    }
-    handleCodeDetected(demoText);
-  };
-
   if (!isOpen) return null;
 
   const currentDraw = availableDraws.find((d) => d.id === selectedDrawId) || availableDraws[0];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200">
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          stopCamera();
+          onClose();
+        }
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200"
+    >
       <div className="bg-white w-full h-full sm:h-auto sm:max-h-[92vh] sm:max-w-4xl sm:rounded-2xl shadow-2xl border-0 sm:border sm:border-slate-200 overflow-hidden flex flex-col">
         {/* Modal Top Bar */}
         <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-3.5 sm:px-5 py-2.5 sm:py-3.5 flex items-center justify-between border-b border-indigo-900/40 shrink-0">
@@ -1039,12 +1020,20 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
             </div>
           </div>
           <button
-            onClick={() => {
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
               stopCamera();
               onClose();
             }}
-            className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer shrink-0"
+            onTouchEnd={(e) => {
+              e.stopPropagation();
+              stopCamera();
+              onClose();
+            }}
+            className="p-2 sm:p-2.5 rounded-xl text-white/90 hover:text-white bg-white/15 hover:bg-white/25 active:bg-white/30 border border-white/25 transition cursor-pointer shrink-0 flex items-center justify-center"
             title="Cerrar comprobador"
+            aria-label="Cerrar comprobador"
           >
             <X className="w-5 h-5" />
           </button>
@@ -1283,15 +1272,6 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
                     <span>Vídeo en directo</span>
                   </button>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={handleLoadDemoTicket}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 font-medium border border-amber-200/80 transition cursor-pointer ml-auto"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Probar boleto muestra</span>
-                </button>
               </div>
 
               {/* Image processing state indicator */}
@@ -2798,23 +2778,48 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
                 )}
 
                 {/* Bottom Actions for current ticket */}
-                <div className="mt-4 pt-3.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
-                  <button
-                    id="scan-another-ticket-bottom-btn"
-                    onClick={handleScanAnotherTicket}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer"
-                  >
-                    <QrCode className="w-4 h-4" />
-                    <span>Escanear Otro Boleto</span>
-                  </button>
+                <div className="mt-4 pt-3.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      id="scan-another-ticket-bottom-btn"
+                      onClick={handleScanAnotherTicket}
+                      className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer"
+                    >
+                      <QrCode className="w-4 h-4" />
+                      <span>Escanear Otro Boleto</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      id="clear-ticket-bottom-btn"
+                      onClick={handleClearCurrentTicket}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-semibold text-xs border border-slate-200 transition cursor-pointer"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Limpiar resultado</span>
+                    </button>
+                  </div>
 
                   <button
-                    id="clear-ticket-bottom-btn"
-                    onClick={handleClearCurrentTicket}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs border border-slate-200 transition cursor-pointer"
+                    type="button"
+                    id="close-ticket-in-card-btn"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      stopCamera();
+                      onClose();
+                    }}
+                    onTouchEnd={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      stopCamera();
+                      onClose();
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-800 font-bold text-xs border border-slate-300 transition cursor-pointer ml-auto"
                   >
-                    <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
-                    <span>Limpiar resultado</span>
+                    <X className="w-3.5 h-3.5 text-slate-600" />
+                    <span>Cerrar</span>
                   </button>
                 </div>
               </div>
@@ -2843,30 +2848,42 @@ MODALIDAD: SEMANAL (MARTES Y VIERNES)
           )}
         </div>
 
-        {/* Modal Footer */}
-        <div className="bg-slate-50 border-t border-slate-200 px-5 py-3 flex items-center justify-between gap-3 text-xs">
-          <span className="text-slate-500 truncate">
+        {/* Modal Footer with safe area padding elevated above mobile navigation buttons */}
+        <div className="bg-slate-50 border-t border-slate-200 px-4 sm:px-5 pt-3 pb-[max(3rem,calc(env(safe-area-inset-bottom,0px)+1.75rem))] sm:pb-3 flex items-center justify-between gap-3 text-xs shrink-0">
+          <span className="text-slate-500 truncate hidden sm:inline">
             {allDraws.length} sorteos oficiales sincronizados en la base de datos
           </span>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto shrink-0">
             {parsedTicket && (
               <button
+                type="button"
                 id="scan-another-ticket-footer-btn"
                 onClick={handleScanAnotherTicket}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold transition shadow-xs cursor-pointer active:scale-95"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold transition shadow-xs cursor-pointer active:scale-95 text-xs"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>Comprobar Otro Boleto</span>
+                <span>Otro Boleto</span>
               </button>
             )}
             <button
-              onClick={() => {
+              type="button"
+              id="modal-footer-close-btn"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 stopCamera();
                 onClose();
               }}
-              className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition cursor-pointer"
+              onTouchEnd={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                stopCamera();
+                onClose();
+              }}
+              className="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-950 text-white font-bold text-xs sm:text-sm border border-slate-600 shadow-md transition cursor-pointer active:scale-95 ml-auto"
             >
-              Cerrar
+              <X className="w-4 h-4 text-slate-300" />
+              <span>Cerrar</span>
             </button>
           </div>
         </div>

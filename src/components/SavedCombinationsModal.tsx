@@ -350,11 +350,13 @@ export const SavedCombinationsModal: React.FC<SavedCombinationsModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="bg-white border-t border-slate-200 px-6 py-3 flex items-center justify-between text-xs text-slate-500">
-          <span>Las combinaciones se guardan localmente en tu navegador de forma segura.</span>
+        <div className="bg-white border-t border-slate-200 px-6 pt-3 pb-[max(2rem,calc(env(safe-area-inset-bottom,0px)+1.25rem))] sm:pb-3 flex items-center justify-between text-xs text-slate-500">
+          <span className="hidden sm:inline">Las combinaciones se guardan localmente en tu navegador de forma segura.</span>
           <button
+            type="button"
             onClick={onClose}
-            className="px-4 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold transition cursor-pointer"
+            onTouchEnd={onClose}
+            className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-900 text-white font-bold transition cursor-pointer ml-auto"
           >
             Cerrar
           </button>

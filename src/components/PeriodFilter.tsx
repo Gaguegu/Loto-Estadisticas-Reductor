@@ -156,7 +156,7 @@ export const PeriodFilter: React.FC<PeriodFilterProps> = ({
                     : 'text-amber-600'
                 }`}
               />
-              <span>{isSyncing ? 'Actualizando...' : missingDrawsCount > 0 ? `Actualizar BD (+${missingDrawsCount})` : 'Actualizar'}</span>
+              <span>{isSyncing ? 'Actualizando Sorteos...' : missingDrawsCount > 0 ? `Actualizar Sorteos (+${missingDrawsCount})` : 'Actualizar Sorteos'}</span>
             </button>
           )}
         </div>

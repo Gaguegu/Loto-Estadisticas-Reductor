@@ -31,8 +31,11 @@ import {
   RefreshCw,
   Tag,
   Ticket,
+  QrCode,
+  X,
 } from 'lucide-react';
 import { SaveCombinationDialog } from './SaveCombinationDialog';
+import { generateTicketQRText, generateTicketQRCodeDataUrl } from '../utils/qrTicketChecker';
 
 interface ColumnsViewerProps {
   result: ReductionResult;
@@ -125,6 +128,53 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
       setBulkReintegro(undefined);
     }
   }, [result.game, result.guarantee, result.columns]);
+
+  // QR Code Modal State for Boletos
+  const [showQRModal, setShowQRModal] = useState<boolean>(false);
+  const [selectedBoletoQRIndex, setSelectedBoletoQRIndex] = useState<number>(0);
+  const [qrCodeDataUrls, setQrCodeDataUrls] = useState<Record<number, string>>({});
+  const [qrCopied, setQrCopied] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!showQRModal) return;
+    let isCancelled = false;
+    const totalBoletos = Math.ceil(result.columns.length / 8);
+
+    const generateQRs = async () => {
+      const qrs: Record<number, string> = {};
+      for (let bIdx = 0; bIdx < totalBoletos; bIdx++) {
+        const startIdx = bIdx * 8;
+        const endIdx = Math.min(startIdx + 8, result.columns.length);
+        const boletoCols = result.columns.slice(startIdx, endIdx).map((col) => ({
+          ...col,
+          reintegro: columnReintegros[col.id] ?? col.reintegro,
+        }));
+        const firstR = boletoCols[0]?.reintegro;
+        const isUniformR = boletoCols.every((c) => c.reintegro === firstR);
+        const boletoR = isUniformR ? firstR : undefined;
+
+        const qrText = generateTicketQRText(result.game, boletoCols, {
+          reintegro: boletoR,
+          title: `BOLETO ${bIdx + 1} (${startIdx + 1}-${endIdx})`,
+        });
+
+        const dataUrl = await generateTicketQRCodeDataUrl(qrText);
+        if (dataUrl) {
+          qrs[bIdx] = dataUrl;
+        }
+      }
+
+      if (!isCancelled) {
+        setQrCodeDataUrls(qrs);
+      }
+    };
+
+    generateQRs();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [showQRModal, result, columnReintegros]);
 
 
   const handleSetAllReintegros = (reintegro: number) => {
@@ -1109,6 +1159,20 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
           </button>
 
           <button
+            id="btn-show-qr-modal"
+            type="button"
+            onClick={() => {
+              setSelectedBoletoQRIndex(0);
+              setShowQRModal(true);
+            }}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition active:scale-95 shadow-md border border-indigo-400 cursor-pointer"
+            title="Genera y muestra códigos QR de los boletos para escanearlos directamente con el comprobador de la app"
+          >
+            <QrCode className="w-4 h-4 text-white" />
+            <span>Códigos QR</span>
+          </button>
+
+          <button
             id="btn-toggle-quality"
             type="button"
             onClick={() => setShowQualityAnalysis(!showQualityAnalysis)}
@@ -1415,6 +1479,216 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
         totalCost={result.totalCost}
         pricePerBet={result.pricePerBet}
       />
+
+      {/* Boletos QR Code Modal */}
+      {showQRModal && (
+        <div
+          id="boletos-qr-modal"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowQRModal(false);
+          }}
+        >
+          <div className="bg-white text-slate-900 rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between gap-3 border-b border-indigo-950 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-400/30 flex items-center justify-center shrink-0">
+                  <QrCode className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white leading-tight">
+                    Códigos QR de Boletos Oficiales
+                  </h3>
+                  <p className="text-xs text-indigo-200/80 mt-0.5">
+                    {result.game === 'primitiva' ? 'Lotería Primitiva' : result.game === 'bonoloto' ? 'Bonoloto' : 'Euromillones'} &bull; {result.columnsCount} columnas
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowQRModal(false)}
+                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition cursor-pointer"
+                title="Cerrar ventana"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-4">
+              {/* Boletos selector tabs */}
+              {boletosList.length > 1 && (
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                  {boletosList.map((boleto) => (
+                    <button
+                      key={boleto.boletoIndex}
+                      type="button"
+                      onClick={() => setSelectedBoletoQRIndex(boleto.boletoIndex)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer border ${
+                        selectedBoletoQRIndex === boleto.boletoIndex
+                          ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs ring-2 ring-indigo-300'
+                          : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                      }`}
+                    >
+                      Boleto {boleto.boletoNumber} ({boleto.startCol}-{boleto.endCol})
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Active Boleto QR card */}
+              {(() => {
+                const activeBoleto = boletosList[selectedBoletoQRIndex] || boletosList[0];
+                if (!activeBoleto) return null;
+                const startIdx = activeBoleto.boletoIndex * 8;
+                const endIdx = Math.min(startIdx + 8, result.columns.length);
+                const boletoCols = result.columns.slice(startIdx, endIdx).map((c) => ({
+                  ...c,
+                  reintegro: columnReintegros[c.id] ?? c.reintegro,
+                }));
+                const qrUrl = qrCodeDataUrls[activeBoleto.boletoIndex];
+                const firstR = boletoCols[0]?.reintegro;
+                const isUniformR = boletoCols.every((c) => c.reintegro === firstR);
+                const boletoR = isUniformR ? firstR : undefined;
+
+                const qrText = generateTicketQRText(result.game, boletoCols, {
+                  reintegro: boletoR,
+                  title: `BOLETO ${activeBoleto.boletoNumber} (${startIdx + 1}-${endIdx})`,
+                });
+
+                const handleCopyQRText = () => {
+                  navigator.clipboard.writeText(qrText);
+                  setQrCopied(true);
+                  setTimeout(() => setQrCopied(false), 2000);
+                };
+
+                const handleDownloadQRImage = () => {
+                  if (!qrUrl) return;
+                  const link = document.createElement('a');
+                  link.href = qrUrl;
+                  link.download = `QR_Boleto_${activeBoleto.boletoNumber}_${result.game}.png`;
+                  link.click();
+                };
+
+                return (
+                  <div className="space-y-4">
+                    {/* Visual QR Code Display */}
+                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left">
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-300 shadow-xs shrink-0">
+                        {qrUrl ? (
+                          <img
+                            src={qrUrl}
+                            alt={`Código QR Boleto ${activeBoleto.boletoNumber}`}
+                            className="w-44 h-44 sm:w-48 sm:h-48 object-contain"
+                          />
+                        ) : (
+                          <div className="w-44 h-44 flex items-center justify-center text-xs text-slate-400 animate-pulse">
+                            Generando código QR...
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex-1 space-y-2">
+                        <div className="flex flex-wrap items-center justify-center sm:justify-start gap-1.5">
+                          <span className="px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 font-black text-xs">
+                            Boleto {activeBoleto.boletoNumber}
+                          </span>
+                          <span className="text-xs text-slate-600 font-semibold">
+                            Cols {activeBoleto.startCol} a {activeBoleto.endCol} ({activeBoleto.columnsCount} ap.)
+                          </span>
+                          {result.game !== 'euromillones' && (
+                            <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 font-bold text-xs border border-blue-200">
+                              {boletoR !== undefined ? `Reintegro: ${boletoR}` : 'Reintegro: —'}
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Enfoca este código con la <strong>cámara del comprobador de la app</strong> para cargar y escrutar automáticamente las apuestas frente al sorteo oficial.
+                        </p>
+
+                        <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={handleCopyQRText}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-800 text-xs font-bold border border-slate-300 shadow-2xs transition active:scale-95 cursor-pointer"
+                          >
+                            {qrCopied ? (
+                              <>
+                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                <span className="text-emerald-700 font-bold">¡Copiado!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3.5 h-3.5 text-slate-600" />
+                                <span>Copiar texto</span>
+                              </>
+                            )}
+                          </button>
+
+                          {qrUrl && (
+                            <button
+                              type="button"
+                              onClick={handleDownloadQRImage}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold border border-indigo-200 transition active:scale-95 cursor-pointer"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              <span>Descargar QR (.png)</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bets list preview */}
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                      <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 pb-1 border-b border-slate-200 flex items-center justify-between">
+                        <span>Apuestas en este QR ({boletoCols.length})</span>
+                        <span>Importe: {(boletoCols.length * result.pricePerBet).toFixed(2)} €</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs font-mono max-h-48 overflow-y-auto">
+                        {boletoCols.map((col) => (
+                          <div
+                            key={col.id}
+                            className="flex items-center justify-between py-0.5 px-2 bg-white rounded border border-slate-200/80"
+                          >
+                            <span className="text-slate-500 font-bold text-[11px]">
+                              C{col.id.toString().padStart(2, '0')}:
+                            </span>
+                            <span className="font-bold text-slate-900 tracking-wider">
+                              {col.numbers.map((n) => n.toString().padStart(2, '0')).join(' ')}
+                            </span>
+                            {col.stars && col.stars.length > 0 && (
+                              <span className="text-amber-700 font-bold ml-1 text-[11px]">
+                                ★ {col.stars.join(' ')}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3.5 bg-slate-100 border-t border-slate-200 flex items-center justify-between text-xs shrink-0">
+              <span className="text-slate-500 text-[11px]">
+                Compatible con el escáner QR de ANSAMA Lotería
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowQRModal(false)}
+                className="px-4 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition cursor-pointer"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* ESCRUTADOR Y COMPROBADOR DE SORTEOS (AUTOMÁTICO / MANUAL) */}
@@ -2047,6 +2321,18 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
                                 <span className="text-[10px] text-slate-400 font-medium">
                                   ({boleto.columnsCount} ap.)
                                 </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedBoletoQRIndex(boleto.boletoIndex);
+                                    setShowQRModal(true);
+                                  }}
+                                  className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 active:bg-indigo-200 border border-indigo-200 px-1.5 py-0.5 rounded cursor-pointer transition active:scale-95"
+                                  title={`Ver código QR del Boleto ${boleto.boletoNumber}`}
+                                >
+                                  <QrCode className="w-3 h-3 text-indigo-600" />
+                                  <span>QR</span>
+                                </button>
                               </div>
 
                               <div className="flex items-center gap-1">
