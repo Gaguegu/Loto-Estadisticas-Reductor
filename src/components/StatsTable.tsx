@@ -121,6 +121,75 @@ export const StatsTable: React.FC<StatsTableProps> = ({
 
   const isEuromillones = game === 'euromillones';
 
+  // Selected numbers ordering mode: Defaults to 'frequency' (números que han salido más veces)
+  const [selectedSortMode, setSelectedSortMode] = useState<'frequency' | 'table' | 'number'>('frequency');
+
+  const statsByNumber = useMemo(() => {
+    const map = new Map<number, NumberStat>();
+    stats.forEach((s) => map.set(s.number, s));
+    return map;
+  }, [stats]);
+
+  const starStatsByNumber = useMemo(() => {
+    const map = new Map<number, NumberStat>();
+    (starStats || []).forEach((s) => map.set(s.number, s));
+    return map;
+  }, [starStats]);
+
+  const tableOrderMap = useMemo(() => {
+    const map = new Map<number, number>();
+    sortedStats.forEach((s, idx) => map.set(s.number, idx));
+    return map;
+  }, [sortedStats]);
+
+  const tableStarOrderMap = useMemo(() => {
+    const map = new Map<number, number>();
+    sortedStarStats.forEach((s, idx) => map.set(s.number, idx));
+    return map;
+  }, [sortedStarStats]);
+
+  // Sorted selected numbers: default by frequency (veces que han salido)
+  const sortedSelectedNumbers = useMemo(() => {
+    const copy = [...selectedNumbers];
+    if (selectedSortMode === 'frequency') {
+      return copy.sort((a, b) => {
+        const countA = statsByNumber.get(a)?.totalCount ?? 0;
+        const countB = statsByNumber.get(b)?.totalCount ?? 0;
+        if (countB !== countA) return countB - countA;
+        return a - b;
+      });
+    }
+    if (selectedSortMode === 'table') {
+      return copy.sort((a, b) => {
+        const orderA = tableOrderMap.get(a) ?? 999;
+        const orderB = tableOrderMap.get(b) ?? 999;
+        return orderA - orderB;
+      });
+    }
+    return copy.sort((a, b) => a - b);
+  }, [selectedNumbers, statsByNumber, tableOrderMap, selectedSortMode]);
+
+  // Sorted selected stars: default by frequency
+  const sortedSelectedStars = useMemo(() => {
+    const copy = [...selectedStars];
+    if (selectedSortMode === 'frequency') {
+      return copy.sort((a, b) => {
+        const countA = starStatsByNumber.get(a)?.totalCount ?? 0;
+        const countB = starStatsByNumber.get(b)?.totalCount ?? 0;
+        if (countB !== countA) return countB - countA;
+        return a - b;
+      });
+    }
+    if (selectedSortMode === 'table') {
+      return copy.sort((a, b) => {
+        const orderA = tableStarOrderMap.get(a) ?? 999;
+        const orderB = tableStarOrderMap.get(b) ?? 999;
+        return orderA - orderB;
+      });
+    }
+    return copy.sort((a, b) => a - b);
+  }, [selectedStars, starStatsByNumber, tableStarOrderMap, selectedSortMode]);
+
   return (
     <div
       className={`bg-white rounded-2xl shadow-xs border transition-colors overflow-hidden ${
@@ -469,56 +538,131 @@ export const StatsTable: React.FC<StatsTableProps> = ({
       </div>
 
       {/* Selected Numbers Chip Summary Bar */}
-      <div className="bg-slate-50 px-4 py-3 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-2 text-xs">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="font-bold text-slate-700">
-            Tus Números Seleccionados ({selectedNumbers.length}
-            {game === 'euromillones' ? ' de 5-10' : ' de 6-12'}):
-          </span>
-          {selectedNumbers.length === 0 ? (
-            <span className="text-slate-400 italic">Ningún número elegido aún</span>
-          ) : (
-            selectedNumbers
-              .sort((a, b) => a - b)
-              .map((num) => (
-                <span
-                  key={num}
-                  onClick={() => onToggleNumber(num)}
-                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold cursor-pointer transition shadow-xs group ${
-                    game === 'primitiva'
-                      ? 'bg-emerald-600 text-white hover:bg-rose-600'
-                      : game === 'bonoloto'
-                      ? 'bg-blue-600 text-white hover:bg-rose-600'
-                      : 'bg-amber-400 text-slate-950 font-black border border-amber-300 hover:bg-rose-500 hover:text-white'
+      <div className="bg-slate-50 px-4 py-3 border-b border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-2.5 text-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-bold text-slate-800">
+              Tus Números Seleccionados ({selectedNumbers.length}
+              {game === 'euromillones' ? ' de 5-10' : ' de 6-12'}):
+            </span>
+
+            {/* Quick selector for order of selected numbers */}
+            {selectedNumbers.length > 1 && (
+              <div className="inline-flex items-center rounded-lg bg-slate-200/80 p-0.5 text-[10px] font-semibold text-slate-600">
+                <button
+                  type="button"
+                  id="btn-sort-selected-freq"
+                  onClick={() => setSelectedSortMode('frequency')}
+                  className={`px-2 py-0.5 rounded-md transition cursor-pointer flex items-center gap-1 ${
+                    selectedSortMode === 'frequency'
+                      ? 'bg-white text-slate-900 shadow-2xs font-black'
+                      : 'hover:text-slate-900'
                   }`}
-                  title="Click para quitar"
+                  title="Ordenar tus números seleccionados de mayor a menor número de apariciones en los sorteos"
                 >
-                  {num}
-                  <span className="text-[10px] opacity-70 group-hover:opacity-100">&times;</span>
-                </span>
-              ))
-          )}
+                  <span>🔥 Más frecuentes {selectedSortMode === 'frequency' && '✓'}</span>
+                </button>
+                <button
+                  type="button"
+                  id="btn-sort-selected-num"
+                  onClick={() => setSelectedSortMode('number')}
+                  className={`px-2 py-0.5 rounded-md transition cursor-pointer flex items-center gap-1 ${
+                    selectedSortMode === 'number'
+                      ? 'bg-white text-slate-900 shadow-2xs font-black'
+                      : 'hover:text-slate-900'
+                  }`}
+                  title="Ordenar tus números seleccionados correlativamente de menor a mayor (1-49)"
+                >
+                  <span>🔢 Numérico {selectedSortMode === 'number' && '✓'}</span>
+                </button>
+                <button
+                  type="button"
+                  id="btn-sort-selected-table"
+                  onClick={() => setSelectedSortMode('table')}
+                  className={`px-2 py-0.5 rounded-md transition cursor-pointer flex items-center gap-1 ${
+                    selectedSortMode === 'table'
+                      ? 'bg-white text-slate-900 shadow-2xs font-black'
+                      : 'hover:text-slate-900'
+                  }`}
+                  title="Ordenar tus números seleccionados según el criterio activo de la tabla"
+                >
+                  <span>📊 Según tabla {selectedSortMode === 'table' && '✓'}</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            {selectedNumbers.length === 0 ? (
+              <span className="text-slate-400 italic">Ningún número elegido aún</span>
+            ) : (
+              sortedSelectedNumbers.map((num) => {
+                const stat = statsByNumber.get(num);
+                const count = stat?.totalCount;
+                return (
+                  <span
+                    key={num}
+                    onClick={() => onToggleNumber(num)}
+                    className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold cursor-pointer transition shadow-xs group ${
+                      game === 'primitiva'
+                        ? 'bg-emerald-600 text-white hover:bg-rose-600'
+                        : game === 'bonoloto'
+                        ? 'bg-blue-600 text-white hover:bg-rose-600'
+                        : 'bg-amber-400 text-slate-950 font-black border border-amber-300 hover:bg-rose-500 hover:text-white'
+                    }`}
+                    title={`Número ${num}: Ha salido ${count ?? 0} veces en los sorteos históricos${
+                      stat?.percentage ? ` (${stat.percentage}%)` : ''
+                    }${
+                      stat?.currentDelay !== undefined ? ` • Atraso actual: ${stat.currentDelay} sorteos` : ''
+                    }. Click para quitar`}
+                  >
+                    <span>{num}</span>
+                    {count !== undefined && count > 0 && (
+                      <span
+                        className={`text-[10px] px-1.5 py-0.2 rounded-full font-semibold ${
+                          game === 'euromillones'
+                            ? 'bg-amber-500/40 text-slate-950 font-bold'
+                            : 'bg-black/20 text-white font-medium'
+                        }`}
+                        title={`Apariciones históricas: ${count} veces`}
+                      >
+                        {count}v
+                      </span>
+                    )}
+                    <span className="text-[10px] opacity-70 group-hover:opacity-100">&times;</span>
+                  </span>
+                );
+              })
+            )}
+          </div>
         </div>
 
         {isEuromillones && (
-          <div className="flex items-center gap-1.5 border-t sm:border-t-0 pt-1 sm:pt-0 border-slate-200">
+          <div className="flex flex-wrap items-center gap-1.5 border-t md:border-t-0 pt-1.5 md:pt-0 border-slate-200">
             <span className="font-bold text-slate-700">Estrellas ({selectedStars.length}):</span>
             {selectedStars.length === 0 ? (
               <span className="text-slate-400 italic">Ninguna</span>
             ) : (
-              selectedStars
-                .sort((a, b) => a - b)
-                .map((star) => (
+              sortedSelectedStars.map((star) => {
+                const starStat = starStatsByNumber.get(star);
+                const count = starStat?.totalCount;
+                return (
                   <span
                     key={star}
                     onClick={() => onToggleStar(star)}
                     className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black cursor-pointer hover:bg-rose-500 hover:text-white transition shadow-xs group border border-amber-300"
-                    title="Click para quitar"
+                    title={`Estrella ${star}: Ha salido ${count ?? 0} veces en los sorteos históricos. Click para quitar`}
                   >
-                    ★ {star}
+                    <span>★ {star}</span>
+                    {count !== undefined && count > 0 && (
+                      <span className="text-[10px] px-1 py-0.2 rounded-full bg-amber-500/40 font-bold text-slate-950">
+                        {count}v
+                      </span>
+                    )}
                     <span className="text-[10px] text-slate-800 group-hover:text-white">&times;</span>
                   </span>
-                ))
+                );
+              })
             )}
           </div>
         )}

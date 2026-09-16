@@ -300,7 +300,7 @@ export const Header: React.FC<HeaderProps> = ({
                     ? 'Buscando...'
                     : hasAppUpdate
                     ? 'Nueva Versión'
-                    : 'Versión App'}
+                    : 'Actualizar App'}
                 </span>
                 {hasAppUpdate && (
                   <span className="flex h-2 w-2 relative">
@@ -450,7 +450,7 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="truncate">Guía PDF</span>
           </button>
 
-          {/* 6. Versión App (GitHub/PWA) */}
+          {/* 6. Actualizar App (GitHub/PWA) */}
           {(onApplyUpdate || onCheckUpdates) && (
             <button
               id="mobile-app-update-btn"
@@ -477,7 +477,7 @@ export const Header: React.FC<HeaderProps> = ({
                 />
               )}
               <span className="truncate">
-                {isCheckingAppUpdate ? 'Buscando...' : hasAppUpdate ? '¡Actualizar!' : 'Versión App'}
+                {isCheckingAppUpdate ? 'Buscando...' : hasAppUpdate ? '¡Actualizar!' : 'Actualizar App'}
               </span>
             </button>
           )}
