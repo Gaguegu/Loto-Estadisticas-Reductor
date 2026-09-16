@@ -141,8 +141,8 @@ export function getPendingDrawDates(game: GameType, existingDraws: LotteryDraw[]
     (d) => d.game === game && d.date <= maxAllowedDateStr && !existingDates.has(d.date)
   ).map((d) => d.date);
 
-  // Check all celebrated official days from Jan 1 and today/yesterday
-  const allOfficialDates = getAllOfficialDatesForGame(game, maxAllowedDateStr, '2026-01-01');
+  // Check all celebrated official days from Jan 1, 2025 and today/yesterday
+  const allOfficialDates = getAllOfficialDatesForGame(game, maxAllowedDateStr, '2025-01-01');
   const missingOfficial = allOfficialDates.filter((date) => !existingDates.has(date));
 
   return Array.from(new Set([...missingSeeds, ...missingOfficial])).sort((a, b) => b.localeCompare(a));
@@ -228,11 +228,11 @@ export function synchronizeDatabase(currentDraws: LotteryDraw[]): SyncResult {
     }
   }
 
-  // 2. Check all celebrated official dates up to maxAllowedDate
+  // 2. Check all celebrated official dates up to maxAllowedDate from 2025-01-01
   const games: GameType[] = ['primitiva', 'bonoloto', 'euromillones'];
   for (const g of games) {
     const maxAllowed = getMaxCelebratedDateForGame(g);
-    const officialDates = getAllOfficialDatesForGame(g, maxAllowed, '2026-01-01');
+    const officialDates = getAllOfficialDatesForGame(g, maxAllowed, '2025-01-01');
 
     for (const date of officialDates) {
       const key = `${g}-${date}`;
