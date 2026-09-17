@@ -7,9 +7,9 @@ export interface AppVersionConfig {
 }
 
 export const CURRENT_APP_VERSION: AppVersionConfig = {
-  version: '2.8.2',
+  version: '2.8.3',
   buildTime: Date.now(),
-  buildDate: '13 de Septiembre de 2026',
+  buildDate: '17 de Septiembre de 2026',
   appName: 'LotoEstadísticas & Reductor',
   defaultGithubRepo: 'Loto-Estadisticas-Reductor',
 };

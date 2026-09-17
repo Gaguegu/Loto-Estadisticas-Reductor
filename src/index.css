@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/* Prevent accidental browser text selection on interactive controls and table headers */
+th, button, [role="button"], .select-none {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
 @media print {
   body {
     background: white !important;

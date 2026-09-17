@@ -638,7 +638,12 @@ export default function App() {
             onClearSelection={handleClearSelection}
             onClearStars={handleClearStars}
             selectedDay={periodFilter.selectedDay || 'all'}
-            onSelectDay={(day) => setPeriodFilter((prev) => ({ ...prev, selectedDay: day }))}
+            onSelectDay={(day) => {
+              if (typeof window !== 'undefined' && window.getSelection) {
+                window.getSelection()?.removeAllRanges();
+              }
+              setPeriodFilter((prev) => ({ ...prev, selectedDay: day }));
+            }}
           />
 
           {/* 3. Reduction Selector & Price Configuration */}

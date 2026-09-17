@@ -678,7 +678,13 @@ export const StatsTable: React.FC<StatsTableProps> = ({
                 <th className="py-3 px-3 w-14 text-center">Rank</th>
                 <th className="py-3 px-3">Número</th>
                 <th
-                  onClick={() => onSelectDay && onSelectDay('all')}
+                  onClick={() => {
+                    if (typeof window !== 'undefined' && window.getSelection) {
+                      window.getSelection()?.removeAllRanges();
+                    }
+                    onSelectDay && onSelectDay('all');
+                  }}
+                  onMouseDown={(e) => e.preventDefault()}
                   title="Click para ver el total de todos los días"
                   className={`py-3 px-3 text-center border-x font-bold transition cursor-pointer select-none ${
                     !selectedDay || selectedDay === 'all'
@@ -697,7 +703,13 @@ export const StatsTable: React.FC<StatsTableProps> = ({
                   return (
                     <th
                       key={day}
-                      onClick={() => onSelectDay && onSelectDay(isDayActive ? 'all' : day)}
+                      onClick={() => {
+                        if (typeof window !== 'undefined' && window.getSelection) {
+                          window.getSelection()?.removeAllRanges();
+                        }
+                        onSelectDay && onSelectDay(isDayActive ? 'all' : day);
+                      }}
+                      onMouseDown={(e) => e.preventDefault()}
                       title={`Click para filtrar solo por sorteos del ${day}`}
                       className={`py-3 px-2 text-center font-semibold transition cursor-pointer select-none ${
                         isDayActive
@@ -709,7 +721,7 @@ export const StatsTable: React.FC<StatsTableProps> = ({
                           : 'text-slate-600 hover:bg-slate-200/70'
                       }`}
                     >
-                      <div className="flex items-center justify-center gap-1">
+                      <div className="flex items-center justify-center gap-1 select-none pointer-events-none">
                         <span>{day}</span>
                         {isDayActive && <span className="text-[10px]">●</span>}
                       </div>
@@ -947,7 +959,13 @@ export const StatsTable: React.FC<StatsTableProps> = ({
                 <th className="py-3 px-3 w-14 text-center">Rank</th>
                 <th className="py-3 px-3">Estrella</th>
                 <th
-                  onClick={() => onSelectDay && onSelectDay('all')}
+                  onClick={() => {
+                    if (typeof window !== 'undefined' && window.getSelection) {
+                      window.getSelection()?.removeAllRanges();
+                    }
+                    onSelectDay && onSelectDay('all');
+                  }}
+                  onMouseDown={(e) => e.preventDefault()}
                   title="Click para ver el total de todos los días"
                   className={`py-3 px-3 text-center border-x font-black transition cursor-pointer select-none ${
                     !selectedDay || selectedDay === 'all'
@@ -962,7 +980,13 @@ export const StatsTable: React.FC<StatsTableProps> = ({
                   return (
                     <th
                       key={day}
-                      onClick={() => onSelectDay && onSelectDay(isDayActive ? 'all' : day)}
+                      onClick={() => {
+                        if (typeof window !== 'undefined' && window.getSelection) {
+                          window.getSelection()?.removeAllRanges();
+                        }
+                        onSelectDay && onSelectDay(isDayActive ? 'all' : day);
+                      }}
+                      onMouseDown={(e) => e.preventDefault()}
                       title={`Click para filtrar solo por sorteos del ${day}`}
                       className={`py-3 px-2 text-center font-semibold transition cursor-pointer select-none ${
                         isDayActive
@@ -970,7 +994,7 @@ export const StatsTable: React.FC<StatsTableProps> = ({
                           : 'text-amber-900 hover:bg-amber-100/80'
                       }`}
                     >
-                      <div className="flex items-center justify-center gap-1">
+                      <div className="flex items-center justify-center gap-1 select-none pointer-events-none">
                         <span>{day}</span>
                         {isDayActive && <span className="text-[10px]">●</span>}
                       </div>

@@ -47,6 +47,9 @@ export const PeriodFilter: React.FC<PeriodFilterProps> = ({
   };
 
   const handleSelectDay = (day: string) => {
+    if (typeof window !== 'undefined' && window.getSelection) {
+      window.getSelection()?.removeAllRanges();
+    }
     onChangeFilter({
       ...filter,
       selectedDay: currentDay === day ? 'all' : day,
@@ -210,7 +213,8 @@ export const PeriodFilter: React.FC<PeriodFilterProps> = ({
           type="button"
           id="btn-day-filter-all"
           onClick={() => handleSelectDay('all')}
-          className={`px-3 py-1.5 rounded-xl text-xs transition-all active:scale-95 border ${
+          onMouseDown={(e) => e.preventDefault()}
+          className={`px-3 py-1.5 rounded-xl text-xs transition-all active:scale-95 border select-none ${
             currentDay === 'all'
               ? activeGame === 'primitiva'
                 ? 'bg-emerald-600 text-white font-bold border-emerald-600 shadow-xs ring-2 ring-emerald-400/40'
@@ -232,7 +236,8 @@ export const PeriodFilter: React.FC<PeriodFilterProps> = ({
               type="button"
               id={`btn-day-filter-${day.toLowerCase()}`}
               onClick={() => handleSelectDay(day)}
-              className={`px-3 py-1.5 rounded-xl text-xs transition-all active:scale-95 border ${
+              onMouseDown={(e) => e.preventDefault()}
+              className={`px-3 py-1.5 rounded-xl text-xs transition-all active:scale-95 border select-none ${
                 isSelected
                   ? activeGame === 'primitiva'
                     ? 'bg-emerald-600 text-white font-bold border-emerald-600 shadow-xs ring-2 ring-emerald-400/40'
