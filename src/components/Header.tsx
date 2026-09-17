@@ -65,7 +65,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header
-      className={`border-b sticky top-0 z-40 shadow-lg transition-colors duration-300 ${
+      className={`border-b relative z-20 shadow-md transition-colors duration-300 ${
         activeGame === 'primitiva'
           ? 'bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-800 border-emerald-500/50 text-white'
           : activeGame === 'bonoloto'

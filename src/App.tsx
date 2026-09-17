@@ -31,7 +31,7 @@ import { useAppUpdate } from './hooks/useAppUpdate';
 import { getSavedCombinations } from './utils/savedCombinations';
 import { SavedCombination } from './types';
 import { CURRENT_APP_VERSION } from './config/version';
-import { Sparkles, Info, HelpCircle, ArrowDown, CheckCircle2, RefreshCw, X, AlertTriangle, FolderHeart } from 'lucide-react';
+import { Sparkles, Info, HelpCircle, ArrowDown, ArrowUp, CheckCircle2, RefreshCw, X, AlertTriangle, FolderHeart } from 'lucide-react';
 
 export default function App() {
   const [activeGame, setActiveGame] = useState<GameType>('primitiva');
@@ -97,6 +97,15 @@ export default function App() {
 
   // Reduction result state
   const [reductionResult, setReductionResult] = useState<ReductionResult | null>(null);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 300);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const columnsRef = useRef<HTMLDivElement>(null);
 
@@ -508,7 +517,7 @@ export default function App() {
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
       {/* Screen Layout (hidden when printing) */}
       <div className="no-print flex-1 flex flex-col">
-        {/* Sticky Header */}
+        {/* Main Header (relative positioning avoids content overlap on scroll) */}
         <Header
           activeGame={activeGame}
           onSelectGame={handleSelectGame}
@@ -907,6 +916,21 @@ export default function App() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Floating Button: Volver Arriba (appears when scrolled down so header is easily reachable) */}
+      {showScrollTop && (
+        <button
+          type="button"
+          id="btn-scroll-top"
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          className="fixed bottom-[max(4.5rem,calc(env(safe-area-inset-bottom,0px)+1.5rem))] left-3 sm:left-6 z-40 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl bg-slate-900/90 hover:bg-slate-900 text-white shadow-xl border border-slate-700/70 backdrop-blur-xs transition-all active:scale-95 cursor-pointer flex items-center gap-1.5 text-xs font-bold animate-in fade-in slide-in-from-bottom-3 duration-200"
+          title="Volver arriba / Cambiar de juego"
+          aria-label="Volver arriba"
+        >
+          <ArrowUp className="w-4 h-4 text-amber-400 shrink-0" />
+          <span className="hidden sm:inline">Subir al Inicio</span>
+        </button>
       )}
 
       {/* Printable Components (rendered ONLY when printing / PDF export) */}
