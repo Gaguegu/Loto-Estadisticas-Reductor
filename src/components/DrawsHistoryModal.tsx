@@ -169,8 +169,8 @@ export const DrawsHistoryModal: React.FC<DrawsHistoryModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-2.5 pt-3 pb-[max(4.75rem,calc(env(safe-area-inset-bottom,0px)+2.5rem))] sm:p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[calc(100dvh-6rem)] sm:max-h-[90vh] flex flex-col overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
         <div
           className={`p-4 border-b flex items-center justify-between ${
@@ -537,15 +537,14 @@ export const DrawsHistoryModal: React.FC<DrawsHistoryModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-3 pt-3 pb-[max(2rem,calc(env(safe-area-inset-bottom,0px)+1.25rem))] sm:pb-3 bg-slate-100 border-t border-slate-200 flex items-center justify-between text-xs">
+        <div className="p-3 bg-slate-100 border-t border-slate-200 flex items-center justify-between text-xs shrink-0">
           <span className="text-slate-500 text-[11px] hidden sm:inline">
             Total en base de datos: <strong>{gameDraws.length}</strong> sorteos de {game}
           </span>
           <button
             type="button"
             onClick={onClose}
-            onTouchEnd={onClose}
-            className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-900 text-white font-bold transition ml-auto"
+            className="px-6 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-950 text-white font-bold transition ml-auto text-xs sm:text-sm shadow-sm active:scale-95 cursor-pointer"
           >
             Cerrar
           </button>

@@ -18,6 +18,7 @@ import {
   Coins,
   CheckCircle2,
 } from 'lucide-react';
+import { downloadBlob } from '../utils/fileDownloader';
 
 interface SavedCombinationsModalProps {
   isOpen: boolean;
@@ -66,13 +67,9 @@ export const SavedCombinationsModal: React.FC<SavedCombinationsModalProps> = ({
   };
 
   const handleExport = () => {
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(combinations, null, 2));
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute('href', dataStr);
-    downloadAnchor.setAttribute('download', `mis_combinaciones_loterias_${new Date().toISOString().split('T')[0]}.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
+    const jsonStr = JSON.stringify(combinations, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
+    downloadBlob(blob, `mis_combinaciones_loterias_${new Date().toISOString().split('T')[0]}.json`);
   };
 
   const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -103,94 +100,105 @@ export const SavedCombinationsModal: React.FC<SavedCombinationsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 pt-3 pb-[max(4.75rem,calc(env(safe-area-inset-bottom,0px)+2.5rem))] sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[calc(100dvh-6rem)] sm:max-h-[90vh]">
         {/* Modal Header */}
-        <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-400/30 flex items-center justify-center text-amber-400">
+        <div className="bg-slate-900 text-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-500/20 border border-amber-400/30 flex items-center justify-center text-amber-400 shrink-0">
               <FolderHeart className="w-5 h-5" />
             </div>
-            <div>
-              <h2 className="text-lg font-black text-white flex items-center gap-2">
-                <span>Mis Combinaciones y Peñas</span>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-amber-400 font-bold border border-slate-700">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <h2 className="text-sm sm:text-lg font-black text-white truncate">
+                  Mis Combinaciones y Peñas
+                </h2>
+                <span className="text-[10px] sm:text-xs px-2 py-0.5 rounded-full bg-slate-800 text-amber-400 font-bold border border-slate-700 whitespace-nowrap">
                   {combinations.length} {combinations.length === 1 ? 'guardada' : 'guardadas'}
                 </span>
-              </h2>
-              <p className="text-xs text-slate-400">
+              </div>
+              <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 line-clamp-2 sm:line-clamp-none">
                 Guarda tus jugadas habituales de peña o combinaciones fijas y cárgalas o escrútalas en 1 clic
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+            className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer shrink-0 ml-2"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Action and Filter Bar */}
-        <div className="bg-slate-50 border-b border-slate-200 px-6 py-3 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-slate-600 mr-1">Filtrar por:</span>
-            <button
-              onClick={() => setFilterGame('all')}
-              className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
-                filterGame === 'all'
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-200'
-              }`}
-            >
-              Todas ({combinations.length})
-            </button>
-            <button
-              onClick={() => setFilterGame('primitiva')}
-              className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
-                filterGame === 'primitiva'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-200'
-              }`}
-            >
-              Primitiva ({combinations.filter((c) => c.game === 'primitiva').length})
-            </button>
-            <button
-              onClick={() => setFilterGame('bonoloto')}
-              className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
-                filterGame === 'bonoloto'
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-200'
-              }`}
-            >
-              Bonoloto ({combinations.filter((c) => c.game === 'bonoloto').length})
-            </button>
-            <button
-              onClick={() => setFilterGame('euromillones')}
-              className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
-                filterGame === 'euromillones'
-                  ? 'bg-amber-400 text-slate-950 font-black shadow-xs'
-                  : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-200'
-              }`}
-            >
-              Euromillones ({combinations.filter((c) => c.game === 'euromillones').length})
-            </button>
-          </div>
+        <div className="bg-slate-50 border-b border-slate-200 px-3 sm:px-6 py-2.5 sm:py-3 flex flex-col gap-2.5 text-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            {/* Filter buttons with clean wrap and mobile responsiveness */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="font-semibold text-slate-600 mr-0.5 shrink-0 text-xs">Filtrar por:</span>
+              <button
+                type="button"
+                onClick={() => setFilterGame('all')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer text-xs ${
+                  filterGame === 'all'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-200'
+                }`}
+              >
+                Todas ({combinations.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterGame('primitiva')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer text-xs ${
+                  filterGame === 'primitiva'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-200'
+                }`}
+              >
+                Primitiva ({combinations.filter((c) => c.game === 'primitiva').length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterGame('bonoloto')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer text-xs ${
+                  filterGame === 'bonoloto'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-200'
+                }`}
+              >
+                Bonoloto ({combinations.filter((c) => c.game === 'bonoloto').length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterGame('euromillones')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer text-xs ${
+                  filterGame === 'euromillones'
+                    ? 'bg-amber-400 text-slate-950 font-black shadow-xs ring-1 ring-amber-500/50'
+                    : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-200'
+                }`}
+              >
+                Euromillones ({combinations.filter((c) => c.game === 'euromillones').length})
+              </button>
+            </div>
 
-          <div className="flex items-center gap-2">
-            <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer font-medium shadow-2xs">
-              <Upload className="w-3.5 h-3.5 text-slate-500" />
-              <span>Importar JSON</span>
-              <input type="file" accept=".json" onChange={handleImport} className="hidden" />
-            </label>
-            <button
-              onClick={handleExport}
-              disabled={combinations.length === 0}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-50 cursor-pointer font-medium shadow-2xs"
-            >
-              <Download className="w-3.5 h-3.5 text-slate-500" />
-              <span>Copia de seguridad</span>
-            </button>
+            {/* Import / Backup actions */}
+            <div className="flex items-center gap-2 shrink-0">
+              <label className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer font-medium shadow-2xs text-xs">
+                <Upload className="w-3.5 h-3.5 text-slate-500" />
+                <span>Importar JSON</span>
+                <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+              </label>
+              <button
+                type="button"
+                onClick={handleExport}
+                disabled={combinations.length === 0}
+                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-50 cursor-pointer font-medium shadow-2xs text-xs"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-500" />
+                <span>Copia de seguridad</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -350,13 +358,12 @@ export const SavedCombinationsModal: React.FC<SavedCombinationsModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="bg-white border-t border-slate-200 px-6 pt-3 pb-[max(2rem,calc(env(safe-area-inset-bottom,0px)+1.25rem))] sm:pb-3 flex items-center justify-between text-xs text-slate-500">
+        <div className="bg-white border-t border-slate-200 px-4 sm:px-6 py-3 flex items-center justify-between text-xs text-slate-500 shrink-0">
           <span className="hidden sm:inline">Las combinaciones se guardan localmente en tu navegador de forma segura.</span>
           <button
             type="button"
             onClick={onClose}
-            onTouchEnd={onClose}
-            className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-900 text-white font-bold transition cursor-pointer ml-auto"
+            className="px-6 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-950 text-white font-bold transition cursor-pointer ml-auto text-xs sm:text-sm shadow-sm active:scale-95"
           >
             Cerrar
           </button>

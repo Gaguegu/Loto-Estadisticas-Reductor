@@ -482,10 +482,8 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
-          {/* 6. Instalar App */}
-          <div className="flex items-center justify-center">
-            <PWAInstallButton />
-          </div>
+          {/* 7. Instalar App */}
+          <PWAInstallButton />
         </div>
 
         {/* Game Navigation Selector */}

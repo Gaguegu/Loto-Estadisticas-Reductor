@@ -821,7 +821,7 @@ export default function App() {
         />
 
         {/* Footer with App Version & Info */}
-        <footer className="mt-12 pt-6 pb-4 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+        <footer className="mt-12 pt-6 pb-[max(5.5rem,calc(env(safe-area-inset-bottom,0px)+4rem))] sm:pb-8 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
           <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-start">
             <span className="font-semibold text-slate-700">ANSAMA LotoEstadísticas &amp; Reductor</span>
             <span>&bull;</span>
@@ -865,7 +865,7 @@ export default function App() {
 
       {/* Floating Toast Notification for Database Synchronization */}
       {syncToast && (
-        <div className="fixed bottom-5 right-5 z-50 max-w-sm w-full sm:w-auto animate-in slide-in-from-bottom-4 duration-200">
+        <div className="fixed bottom-[max(4.5rem,calc(env(safe-area-inset-bottom,0px)+1.5rem))] right-3 sm:right-5 z-50 max-w-sm w-full sm:w-auto animate-in slide-in-from-bottom-4 duration-200">
           <div
             className={`p-4 rounded-2xl shadow-2xl border flex items-start gap-3 text-white ${
               syncToast.type === 'success'

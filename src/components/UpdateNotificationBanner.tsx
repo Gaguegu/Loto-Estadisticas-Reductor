@@ -17,7 +17,7 @@ export const UpdateNotificationBanner: React.FC<UpdateNotificationBannerProps> =
   if (!hasUpdate) return null;
 
   return (
-    <div className="fixed bottom-4 left-3 right-3 sm:left-5 sm:right-auto sm:max-w-sm z-50 animate-in slide-in-from-bottom-4 duration-300">
+    <div className="fixed bottom-[max(4.5rem,calc(env(safe-area-inset-bottom,0px)+1.5rem))] left-3 right-3 sm:left-5 sm:right-auto sm:max-w-sm z-50 animate-in slide-in-from-bottom-4 duration-300">
       <div className="bg-slate-900 text-white px-3.5 py-3 rounded-2xl shadow-2xl border border-emerald-500/60 flex items-center justify-between gap-2.5">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 shrink-0">

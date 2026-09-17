@@ -14,9 +14,12 @@ import {
   HelpCircle,
   ExternalLink,
   CheckCircle2,
+  Loader2,
 } from 'lucide-react';
 import ansamaLogo from '../assets/images/ansama_lottery_logo_1788692658153.jpg';
 import { CURRENT_APP_VERSION } from '../config/version';
+import { generateUserManualPDF } from '../utils/pdfGenerator';
+import { downloadBlob } from '../utils/fileDownloader';
 
 interface UserManualModalProps {
   isOpen: boolean;
@@ -30,8 +33,26 @@ export const UserManualModal: React.FC<UserManualModalProps> = ({
   onPrintManual,
 }) => {
   const [activeTab, setActiveTab] = useState<'intro' | 'games' | 'stats' | 'reductions' | 'columns' | 'peñas' | 'sync' | 'tips'>('intro');
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
 
   if (!isOpen) return null;
+
+  const handleDownloadPDF = async () => {
+    try {
+      setIsGeneratingPDF(true);
+      const doc = await generateUserManualPDF();
+      const blob = doc.output('blob');
+      downloadBlob(blob, 'Manual_Usuario_ANSAMA_LotoEstadisticas_Pro.pdf');
+      setDownloadSuccess(true);
+      setTimeout(() => setDownloadSuccess(false), 3500);
+    } catch (err) {
+      console.error('Error al generar PDF del manual:', err);
+      onPrintManual();
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  };
 
   const sections = [
     { id: 'intro', label: '1. Introducción', icon: BookOpen },
@@ -45,8 +66,8 @@ export const UserManualModal: React.FC<UserManualModalProps> = ({
   ] as const;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/75 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-slate-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 pt-3 pb-[max(4.75rem,calc(env(safe-area-inset-bottom,0px)+2.5rem))] sm:p-6 bg-black/75 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[calc(100dvh-6rem)] sm:max-h-[90vh] flex flex-col overflow-hidden border border-slate-200">
         
         {/* Modal Header */}
         <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between border-b border-white/10 shrink-0">
@@ -78,13 +99,30 @@ export const UserManualModal: React.FC<UserManualModalProps> = ({
           <div className="flex items-center gap-2">
             <button
               id="manual-download-pdf-btn"
-              onClick={onPrintManual}
+              onClick={handleDownloadPDF}
+              disabled={isGeneratingPDF}
               className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 text-xs font-black shadow-md transition active:scale-95 cursor-pointer"
-              title="Descargar o imprimir la guía completa en PDF"
+              title="Descargar la guía completa en formato PDF"
             >
-              <FileDown className="w-4 h-4" />
-              <span className="hidden sm:inline">Descargar / Imprimir en PDF</span>
-              <span className="sm:hidden">PDF</span>
+              {isGeneratingPDF ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                  <span className="hidden sm:inline">Generando PDF...</span>
+                  <span className="sm:hidden">...</span>
+                </>
+              ) : downloadSuccess ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-950" />
+                  <span className="hidden sm:inline">¡Descargado!</span>
+                  <span className="sm:hidden">Listo</span>
+                </>
+              ) : (
+                <>
+                  <FileDown className="w-4 h-4" />
+                  <span className="hidden sm:inline">Descargar en PDF</span>
+                  <span className="sm:hidden">PDF</span>
+                </>
+              )}
             </button>
 
             <button
@@ -495,15 +533,24 @@ export const UserManualModal: React.FC<UserManualModalProps> = ({
         {/* Modal Footer */}
         <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs shrink-0">
           <div className="text-slate-500 text-center sm:text-left">
-            Pulsa en <strong>«Descargar / Imprimir en PDF»</strong> para guardar este manual como documento oficial en tu ordenador o móvil.
+            Pulsa en <strong>«Descargar en PDF»</strong> para guardar este manual como documento oficial en tu ordenador o móvil.
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={onPrintManual}
+              onClick={handleDownloadPDF}
+              disabled={isGeneratingPDF}
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition active:scale-95 shadow-xs cursor-pointer"
             >
-              <Printer className="w-4 h-4 text-amber-400" />
-              <span>Imprimir / Guardar como PDF</span>
+              <FileDown className="w-4 h-4 text-amber-400" />
+              <span>{isGeneratingPDF ? 'Generando PDF...' : 'Descargar en PDF'}</span>
+            </button>
+            <button
+              onClick={onPrintManual}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 font-semibold transition active:scale-95 cursor-pointer"
+              title="Abrir diálogo de impresión del sistema"
+            >
+              <Printer className="w-3.5 h-3.5 text-slate-500" />
+              <span>Imprimir</span>
             </button>
             <button
               onClick={onClose}

@@ -1026,12 +1026,7 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
               stopCamera();
               onClose();
             }}
-            onTouchEnd={(e) => {
-              e.stopPropagation();
-              stopCamera();
-              onClose();
-            }}
-            className="p-2 sm:p-2.5 rounded-xl text-white/90 hover:text-white bg-white/15 hover:bg-white/25 active:bg-white/30 border border-white/25 transition cursor-pointer shrink-0 flex items-center justify-center"
+            className="p-2 sm:p-2.5 rounded-xl text-white/90 hover:text-white bg-white/15 hover:bg-white/25 active:bg-white/30 border border-white/25 transition cursor-pointer shrink-0 flex items-center justify-center active:scale-95"
             title="Cerrar comprobador"
             aria-label="Cerrar comprobador"
           >
@@ -2810,13 +2805,7 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
                       stopCamera();
                       onClose();
                     }}
-                    onTouchEnd={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      stopCamera();
-                      onClose();
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-800 font-bold text-xs border border-slate-300 transition cursor-pointer ml-auto"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-800 font-bold text-xs border border-slate-300 transition cursor-pointer ml-auto active:scale-95"
                   >
                     <X className="w-3.5 h-3.5 text-slate-600" />
                     <span>Cerrar</span>
@@ -2849,7 +2838,7 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
         </div>
 
         {/* Modal Footer with safe area padding elevated above mobile navigation buttons */}
-        <div className="bg-slate-50 border-t border-slate-200 px-4 sm:px-5 pt-3 pb-[max(3rem,calc(env(safe-area-inset-bottom,0px)+1.75rem))] sm:pb-3 flex items-center justify-between gap-3 text-xs shrink-0">
+        <div className="bg-slate-50 border-t border-slate-200 px-4 sm:px-5 pt-3 pb-[max(4.75rem,calc(env(safe-area-inset-bottom,0px)+3rem))] sm:pb-3 flex items-center justify-between gap-3 text-xs shrink-0">
           <span className="text-slate-500 truncate hidden sm:inline">
             {allDraws.length} sorteos oficiales sincronizados en la base de datos
           </span>
@@ -2869,12 +2858,6 @@ export const TicketQRScannerModal: React.FC<TicketQRScannerModalProps> = ({
               type="button"
               id="modal-footer-close-btn"
               onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                stopCamera();
-                onClose();
-              }}
-              onTouchEnd={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 stopCamera();

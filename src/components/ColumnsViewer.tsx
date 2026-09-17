@@ -36,6 +36,8 @@ import {
 } from 'lucide-react';
 import { SaveCombinationDialog } from './SaveCombinationDialog';
 import { generateTicketQRText, generateTicketQRCodeDataUrl } from '../utils/qrTicketChecker';
+import { PrintPDFModal } from './PrintPDFModal';
+import { downloadBlob, copyToClipboard } from '../utils/fileDownloader';
 
 interface ColumnsViewerProps {
   result: ReductionResult;
@@ -131,6 +133,7 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
 
   // QR Code Modal State for Boletos
   const [showQRModal, setShowQRModal] = useState<boolean>(false);
+  const [showPrintPDFModal, setShowPrintPDFModal] = useState<boolean>(false);
   const [selectedBoletoQRIndex, setSelectedBoletoQRIndex] = useState<number>(0);
   const [qrCodeDataUrls, setQrCodeDataUrls] = useState<Record<number, string>>({});
   const [qrCopied, setQrCopied] = useState<boolean>(false);
@@ -832,7 +835,7 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
   }, [evaluatedColumns, activeDrawInfo, hitsFilter, sortByHits, parityFilter, sumRangeFilter, result.game]);
 
   // Copy and TXT download
-  const handleCopy = () => {
+  const handleCopy = async () => {
     const lines = result.columns.map((col) => {
       const numStr = col.numbers.map((n) => n.toString().padStart(2, '0')).join(' ');
       const starStr = col.stars ? ` [★ ${col.stars.join(' ')}]` : '';
@@ -843,9 +846,11 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
 
     const textToCopy = `=== ${result.game.toUpperCase()} - SISTEMA REDUCIDO ===\nGarantía: ${plan.name}\nNúmeros jugados (${result.selectedNumbers.length}): ${result.selectedNumbers.join(', ')}\nTotal Apuestas: ${result.columnsCount} columnas\nPrecio Total: ${result.totalCost.toFixed(2)} €\n\n${lines.join('\n')}`;
 
-    navigator.clipboard.writeText(textToCopy);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+    const success = await copyToClipboard(textToCopy);
+    if (success) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    }
   };
 
   const handleDownloadTxt = () => {
@@ -860,12 +865,7 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
     const textContent = `==============================================\n${result.game.toUpperCase()} - SISTEMA REDUCIDO\n==============================================\nGarantía: ${plan.name}\nNúmeros elegidos (${result.selectedNumbers.length}): ${result.selectedNumbers.join(', ')}\n${result.selectedStars ? `Estrellas: ${result.selectedStars.join(', ')}\n` : ''}Total columnas: ${result.columnsCount}\nPrecio por apuesta: ${result.pricePerBet.toFixed(2)} €\nImporte Total: ${result.totalCost.toFixed(2)} €\nFecha: ${new Date().toLocaleString('es-ES')}\n==============================================\n\n${lines.join('\n')}\n`;
 
     const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `columnas_${result.game}_${result.guarantee}_${result.columnsCount}apuestas.txt`;
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, `columnas_${result.game}_${result.guarantee}_${result.columnsCount}apuestas.txt`);
   };
 
   const handleDownloadCsv = () => {
@@ -912,12 +912,7 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
 
     const csvContent = [headers.join(','), ...rows].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `columnas_${result.game}_${result.guarantee}_${result.columnsCount}apuestas.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, `columnas_${result.game}_${result.guarantee}_${result.columnsCount}apuestas.csv`);
   };
 
   const handleDownloadTerminal = () => {
@@ -932,12 +927,7 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
 
     const textContent = lines.join('\r\n');
     const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `terminal_${result.game}_${result.columnsCount}apuestas.txt`;
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, `terminal_${result.game}_${result.columnsCount}apuestas.txt`);
   };
 
   // Manual toggle number
@@ -1115,8 +1105,8 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
         >
           <button
             id="btn-print-pdf"
-            onClick={onPrint}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl font-black text-xs sm:text-sm shadow-md transition-all active:scale-95 border ${
+            onClick={() => setShowPrintPDFModal(true)}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl font-black text-xs sm:text-sm shadow-md transition-all active:scale-95 border cursor-pointer ${
               result.game === 'primitiva'
                 ? 'bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-400 text-slate-950 border-emerald-300 hover:from-emerald-400 hover:to-teal-300'
                 : result.game === 'bonoloto'
@@ -1480,16 +1470,25 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
         pricePerBet={result.pricePerBet}
       />
 
+      {/* Print / Save in PDF Modal */}
+      <PrintPDFModal
+        isOpen={showPrintPDFModal}
+        onClose={() => setShowPrintPDFModal(false)}
+        result={result}
+        columnReintegros={columnReintegros}
+        onClassicPrint={onPrint}
+      />
+
       {/* Boletos QR Code Modal */}
       {showQRModal && (
         <div
           id="boletos-qr-modal"
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-2.5 pt-3 pb-[max(4.75rem,calc(env(safe-area-inset-bottom,0px)+2.5rem))] sm:p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in"
           onClick={(e) => {
             if (e.target === e.currentTarget) setShowQRModal(false);
           }}
         >
-          <div className="bg-white text-slate-900 rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95">
+          <div className="bg-white text-slate-900 rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full max-h-[calc(100dvh-6rem)] sm:max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95">
             {/* Modal Header */}
             <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between gap-3 border-b border-indigo-950 shrink-0">
               <div className="flex items-center gap-2.5">

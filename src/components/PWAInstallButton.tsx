@@ -14,34 +14,36 @@ export const PWAInstallButton: React.FC = () => {
   // Chromium / Android / Desktop flow
   if (isInstallable) {
     return (
-      <button
-        id="pwa-install-btn"
-        onClick={install}
-        className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-3.5 py-2 text-xs md:text-sm font-semibold text-slate-950 shadow-md hover:from-amber-400 hover:to-amber-500 transition-all active:scale-95"
-        title="Instalar como app móvil o de escritorio"
-      >
-        <Download className="w-4 h-4 text-slate-950" />
-        <span>Instalar App</span>
-      </button>
+      <div className="flex items-center justify-center">
+        <button
+          id="pwa-install-btn"
+          onClick={install}
+          className="inline-flex items-center justify-center gap-1.5 w-full rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-3 py-2 text-xs font-bold text-slate-950 shadow-md hover:from-amber-400 hover:to-amber-500 transition-all active:scale-95"
+          title="Instalar como app móvil o de escritorio"
+        >
+          <Download className="w-3.5 h-3.5 text-slate-950 shrink-0" />
+          <span className="truncate">Instalar App</span>
+        </button>
+      </div>
     );
   }
 
   // iOS Safari flow
   if (isIOS) {
     return (
-      <>
+      <div className="flex items-center justify-center">
         <button
           id="pwa-ios-install-btn"
           onClick={() => setShowIOSGuide(true)}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/80 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700 transition"
+          className="inline-flex items-center justify-center gap-1.5 w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold text-white hover:bg-white/20 transition active:scale-95"
         >
-          <Smartphone className="w-3.5 h-3.5 text-amber-400" />
-          <span>Instalar en iPhone</span>
+          <Smartphone className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <span className="truncate">En iPhone</span>
         </button>
 
         {showIOSGuide && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-            <div className="w-full max-w-sm rounded-2xl bg-slate-900 border border-slate-700 p-6 shadow-2xl text-white">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 pb-[max(4.75rem,calc(env(safe-area-inset-bottom,0px)+2.5rem))] animate-in fade-in duration-200">
+            <div className="w-full max-w-sm rounded-2xl bg-slate-900 border border-slate-700 p-6 shadow-2xl text-white max-h-[calc(100dvh-6rem)] overflow-y-auto">
               <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                 <div className="flex items-center gap-2">
                   <Smartphone className="w-5 h-5 text-amber-400" />
@@ -49,7 +51,7 @@ export const PWAInstallButton: React.FC = () => {
                 </div>
                 <button
                   onClick={() => setShowIOSGuide(false)}
-                  className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+                  className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -76,14 +78,14 @@ export const PWAInstallButton: React.FC = () => {
               </div>
               <button
                 onClick={() => setShowIOSGuide(false)}
-                className="mt-5 w-full rounded-xl bg-amber-500 py-2.5 text-sm font-semibold text-slate-950 hover:bg-amber-400 transition"
+                className="mt-5 w-full rounded-xl bg-amber-500 py-2.5 text-sm font-semibold text-slate-950 hover:bg-amber-400 transition cursor-pointer"
               >
                 Entendido
               </button>
             </div>
           </div>
         )}
-      </>
+      </div>
     );
   }
 
