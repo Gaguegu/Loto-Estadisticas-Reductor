@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { GameType, NumberStat, SelectionCriterion } from '../types';
 import { GAME_DRAW_DAYS } from '../utils/lotteryStats';
 import {
@@ -25,7 +25,7 @@ interface StatsTableProps {
   onToggleNumber: (num: number) => void;
   selectedStars: number[];
   onToggleStar: (star: number) => void;
-  onSelectTopN: (count: number) => void;
+  onSelectTopN: (count: number, specificNumbers?: number[]) => void;
   onSelectTopStars: (count: number) => void;
   onSelectTopDelay?: (count: number) => void;
   onSelectBalanced?: (count: number) => void;
@@ -60,10 +60,39 @@ export const StatsTable: React.FC<StatsTableProps> = ({
 }) => {
   const [showAll, setShowAll] = useState(false);
   const [activeTab, setActiveTab] = useState<'numbers' | 'stars'>('numbers');
-  const [sortMode, setSortMode] = useState<SortMode>('frequency');
+  const [sortMode, setSortMode] = useState<SortMode>(() =>
+    selectedDay && selectedDay !== 'all' ? (`day_${selectedDay}` as SortMode) : 'frequency'
+  );
   const [starSelectCount, setStarSelectCount] = useState<number>(() =>
     selectedStars.length >= 2 && selectedStars.length <= 5 ? selectedStars.length : 5
   );
+
+  // Synchronize internal sortMode with selectedDay prop if selectedDay changes externally
+  useEffect(() => {
+    if (selectedDay && selectedDay !== 'all') {
+      setSortMode(`day_${selectedDay}` as SortMode);
+    } else if (selectedDay === 'all' && sortMode.startsWith('day_')) {
+      setSortMode('frequency');
+    }
+  }, [selectedDay]);
+
+  const handleSelectDaySort = (day: string) => {
+    const isCurrentlyActive = sortMode === `day_${day}`;
+    if (isCurrentlyActive) {
+      setSortMode('frequency');
+      onSelectDay?.('all');
+    } else {
+      setSortMode(`day_${day}` as SortMode);
+      onSelectDay?.(day);
+    }
+  };
+
+  const handleFrequencySort = () => {
+    setSortMode('frequency');
+    onSelectDay?.('all');
+  };
+
+  const activeDayName = sortMode.startsWith('day_') ? sortMode.replace('day_', '') : null;
 
   const drawDays = GAME_DRAW_DAYS[game];
   const topTargetCount = game === 'euromillones' ? 10 : 12;
@@ -173,8 +202,12 @@ export const StatsTable: React.FC<StatsTableProps> = ({
     const copy = [...selectedNumbers];
     if (selectedSortMode === 'frequency') {
       return copy.sort((a, b) => {
-        const countA = statsByNumber.get(a)?.totalCount ?? 0;
-        const countB = statsByNumber.get(b)?.totalCount ?? 0;
+        const countA = activeDayName
+          ? (statsByNumber.get(a)?.byDay[activeDayName] ?? 0)
+          : (statsByNumber.get(a)?.totalCount ?? 0);
+        const countB = activeDayName
+          ? (statsByNumber.get(b)?.byDay[activeDayName] ?? 0)
+          : (statsByNumber.get(b)?.totalCount ?? 0);
         if (countB !== countA) return countB - countA;
         return a - b;
       });
@@ -187,15 +220,19 @@ export const StatsTable: React.FC<StatsTableProps> = ({
       });
     }
     return copy.sort((a, b) => a - b);
-  }, [selectedNumbers, statsByNumber, tableOrderMap, selectedSortMode]);
+  }, [selectedNumbers, statsByNumber, tableOrderMap, selectedSortMode, activeDayName]);
 
   // Sorted selected stars: default by frequency
   const sortedSelectedStars = useMemo(() => {
     const copy = [...selectedStars];
     if (selectedSortMode === 'frequency') {
       return copy.sort((a, b) => {
-        const countA = starStatsByNumber.get(a)?.totalCount ?? 0;
-        const countB = starStatsByNumber.get(b)?.totalCount ?? 0;
+        const countA = activeDayName
+          ? (starStatsByNumber.get(a)?.byDay[activeDayName] ?? 0)
+          : (starStatsByNumber.get(a)?.totalCount ?? 0);
+        const countB = activeDayName
+          ? (starStatsByNumber.get(b)?.byDay[activeDayName] ?? 0)
+          : (starStatsByNumber.get(b)?.totalCount ?? 0);
         if (countB !== countA) return countB - countA;
         return a - b;
       });
@@ -208,7 +245,7 @@ export const StatsTable: React.FC<StatsTableProps> = ({
       });
     }
     return copy.sort((a, b) => a - b);
-  }, [selectedStars, starStatsByNumber, tableStarOrderMap, selectedSortMode]);
+  }, [selectedStars, starStatsByNumber, tableStarOrderMap, selectedSortMode, activeDayName]);
 
   return (
     <div
@@ -312,7 +349,14 @@ export const StatsTable: React.FC<StatsTableProps> = ({
             <>
               <button
                 id="btn-select-top-exact"
-                onClick={() => onSelectTopN(topTargetCount)}
+                onClick={() => {
+                  if (activeDayName) {
+                    const topDayNums = sortedStats.slice(0, topTargetCount).map((s) => s.number);
+                    onSelectTopN(topTargetCount, topDayNums);
+                  } else {
+                    onSelectTopN(topTargetCount);
+                  }
+                }}
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs active:scale-95 border ${
                   game === 'primitiva'
                     ? 'bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white border-emerald-500 shadow-emerald-900/10'
@@ -320,10 +364,14 @@ export const StatsTable: React.FC<StatsTableProps> = ({
                     ? 'bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 text-white border-blue-500 shadow-blue-900/10'
                     : 'bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black border-amber-300 shadow-amber-900/10'
                 }`}
-                title="Selecciona los números que más veces han salido"
+                title={
+                  activeDayName
+                    ? `Selecciona los ${topTargetCount} números más repetidos en sorteos del ${activeDayName}`
+                    : 'Selecciona los números que más veces han salido'
+                }
               >
                 <Flame className={`w-3.5 h-3.5 ${game === 'euromillones' ? 'text-slate-950' : 'text-white'}`} />
-                <span>Top {topTargetCount} Frecuentes</span>
+                <span>Top {topTargetCount} {activeDayName ? `de ${activeDayName}` : 'Frecuentes'}</span>
               </button>
 
               {onSelectTopDelay && (
@@ -403,16 +451,22 @@ export const StatsTable: React.FC<StatsTableProps> = ({
               <button
                 id="btn-select-stars-freq"
                 type="button"
-                onClick={() =>
-                  onSelectTopStarsByCriterion
-                    ? onSelectTopStarsByCriterion(starSelectCount, 'frequency')
-                    : onSelectTopStars(starSelectCount)
-                }
+                onClick={() => {
+                  if (onSelectTopStarsByCriterion) {
+                    onSelectTopStarsByCriterion(starSelectCount, 'frequency');
+                  } else {
+                    onSelectTopStars(starSelectCount);
+                  }
+                }}
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black transition border border-amber-300 shadow-xs active:scale-95 cursor-pointer"
-                title="Selecciona las estrellas más frecuentes"
+                title={
+                  activeDayName
+                    ? `Selecciona las ${starSelectCount} estrellas más repetidas en sorteos del ${activeDayName}`
+                    : 'Selecciona las estrellas más frecuentes'
+                }
               >
                 <Flame className="w-3.5 h-3.5 fill-slate-950 text-slate-950" />
-                <span>Top {starSelectCount} Frecuentes</span>
+                <span>Top {starSelectCount} {activeDayName ? `de ${activeDayName}` : 'Frecuentes'}</span>
               </button>
 
               {/* Mayor Atraso */}
@@ -486,7 +540,7 @@ export const StatsTable: React.FC<StatsTableProps> = ({
           <div className="flex items-center gap-1">
             <button
               type="button"
-              onClick={() => setSortMode('frequency')}
+              onClick={handleFrequencySort}
               className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
                 sortMode === 'frequency'
                   ? 'bg-white text-slate-900 shadow-2xs border border-slate-300 font-black'
@@ -552,7 +606,7 @@ export const StatsTable: React.FC<StatsTableProps> = ({
                 <button
                   key={day}
                   type="button"
-                  onClick={() => setSortMode(isDayActive ? 'frequency' : `day_${day}`)}
+                  onClick={() => handleSelectDaySort(day)}
                   className={`px-2 py-1 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
                     isDayActive
                       ? game === 'primitiva'
@@ -648,7 +702,10 @@ export const StatsTable: React.FC<StatsTableProps> = ({
             ) : (
               sortedSelectedNumbers.map((num) => {
                 const stat = statsByNumber.get(num);
-                const count = stat?.totalCount;
+                const dayCount = activeDayName ? stat?.byDay[activeDayName] ?? 0 : undefined;
+                const totalCount = stat?.totalCount;
+                const displayCount = activeDayName ? dayCount : totalCount;
+
                 return (
                   <span
                     key={num}
@@ -660,23 +717,29 @@ export const StatsTable: React.FC<StatsTableProps> = ({
                         ? 'bg-blue-600 text-white hover:bg-rose-600'
                         : 'bg-amber-400 text-slate-950 font-black border border-amber-300 hover:bg-rose-500 hover:text-white'
                     }`}
-                    title={`Número ${num}: Ha salido ${count ?? 0} veces en los sorteos históricos${
-                      stat?.percentage ? ` (${stat.percentage}%)` : ''
-                    }${
+                    title={`Número ${num}: ${
+                      activeDayName
+                        ? `Ha salido ${dayCount ?? 0} veces en sorteos del ${activeDayName} (${totalCount ?? 0} veces en total)`
+                        : `Ha salido ${totalCount ?? 0} veces en los sorteos históricos`
+                    }${stat?.percentage ? ` (${stat.percentage}%)` : ''}${
                       stat?.currentDelay !== undefined ? ` • Atraso actual: ${stat.currentDelay} sorteos` : ''
                     }. Click para quitar`}
                   >
                     <span>{num}</span>
-                    {count !== undefined && count > 0 && (
+                    {displayCount !== undefined && displayCount > 0 && (
                       <span
                         className={`text-[10px] px-1.5 py-0.2 rounded-full font-semibold ${
                           game === 'euromillones'
                             ? 'bg-amber-500/40 text-slate-950 font-bold'
                             : 'bg-black/20 text-white font-medium'
                         }`}
-                        title={`Apariciones históricas: ${count} veces`}
+                        title={
+                          activeDayName
+                            ? `${displayCount} veces en sorteos del ${activeDayName}`
+                            : `Apariciones históricas: ${displayCount} veces`
+                        }
                       >
-                        {count}v
+                        {displayCount}v{activeDayName ? ` (${activeDayName.slice(0, 1)})` : ''}
                       </span>
                     )}
                     <span className="text-[10px] opacity-70 group-hover:opacity-100">&times;</span>
@@ -695,18 +758,25 @@ export const StatsTable: React.FC<StatsTableProps> = ({
             ) : (
               sortedSelectedStars.map((star) => {
                 const starStat = starStatsByNumber.get(star);
-                const count = starStat?.totalCount;
+                const dayCount = activeDayName ? starStat?.byDay[activeDayName] ?? 0 : undefined;
+                const totalCount = starStat?.totalCount;
+                const displayCount = activeDayName ? dayCount : totalCount;
+
                 return (
                   <span
                     key={star}
                     onClick={() => onToggleStar(star)}
                     className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black cursor-pointer hover:bg-rose-500 hover:text-white transition shadow-xs group border border-amber-300"
-                    title={`Estrella ${star}: Ha salido ${count ?? 0} veces en los sorteos históricos. Click para quitar`}
+                    title={`Estrella ${star}: ${
+                      activeDayName
+                        ? `Ha salido ${dayCount ?? 0} veces en sorteos del ${activeDayName} (${totalCount ?? 0} en total)`
+                        : `Ha salido ${totalCount ?? 0} veces en total`
+                    }. Click para quitar`}
                   >
                     <span>★ {star}</span>
-                    {count !== undefined && count > 0 && (
+                    {displayCount !== undefined && displayCount > 0 && (
                       <span className="text-[10px] px-1 py-0.2 rounded-full bg-amber-500/40 font-bold text-slate-950">
-                        {count}v
+                        {displayCount}v{activeDayName ? ` (${activeDayName.slice(0, 1)})` : ''}
                       </span>
                     )}
                     <span className="text-[10px] text-slate-800 group-hover:text-white">&times;</span>
@@ -720,16 +790,16 @@ export const StatsTable: React.FC<StatsTableProps> = ({
 
       {/* Main Table View */}
       {activeTab === 'numbers' ? (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs sm:text-sm">
+        <div className="overflow-x-auto relative">
+          <table className="w-full text-left border-collapse text-xs sm:text-sm min-w-[760px]">
             <thead>
-              <tr className="bg-slate-100/80 text-slate-700 uppercase text-[11px] font-bold tracking-wider border-b border-slate-200">
-                <th className="py-3 px-3 w-12 text-center">Sel.</th>
-                <th className="py-3 px-3 w-14 text-center">Rank</th>
+              <tr className="bg-slate-100 text-slate-700 uppercase text-[11px] font-bold tracking-wider border-b border-slate-200">
+                <th className="py-3 px-3 w-12 min-w-[48px] max-w-[48px] text-center sticky left-0 z-30 bg-slate-100 shadow-[1px_0_0_0_#e2e8f0]">Sel.</th>
+                <th className="py-3 px-3 w-12 min-w-[48px] max-w-[48px] text-center sticky left-12 z-30 bg-slate-100 shadow-[1px_0_0_0_#e2e8f0]">Rank</th>
                 <th
                   onClick={() => setSortMode('number')}
                   title="Click para ordenar correlativamente por número (1-49)"
-                  className="py-3 px-3 cursor-pointer hover:text-slate-950 transition select-none"
+                  className="py-3 px-3 min-w-[110px] cursor-pointer hover:text-slate-950 transition select-none sticky left-24 z-30 bg-slate-100 shadow-[3px_0_5px_-2px_rgba(0,0,0,0.12)] border-r border-slate-300/80"
                 >
                   <div className="flex items-center gap-1 select-none pointer-events-none">
                     <span>Número</span>
@@ -737,7 +807,7 @@ export const StatsTable: React.FC<StatsTableProps> = ({
                   </div>
                 </th>
                 <th
-                  onClick={() => setSortMode('frequency')}
+                  onClick={handleFrequencySort}
                   onMouseDown={(e) => e.preventDefault()}
                   title="Click para ordenar por Total Veces (todos los días)"
                   className={`py-3 px-3 text-center border-x font-bold transition cursor-pointer select-none ${
@@ -760,7 +830,7 @@ export const StatsTable: React.FC<StatsTableProps> = ({
                   return (
                     <th
                       key={day}
-                      onClick={() => setSortMode(isDayActive ? 'frequency' : `day_${day}`)}
+                      onClick={() => handleSelectDaySort(day)}
                       onMouseDown={(e) => e.preventDefault()}
                       title={`Click para ordenar por apariciones de los sorteos del ${day} (conservando todos los datos)`}
                       className={`py-3 px-2 text-center font-semibold transition cursor-pointer select-none ${
@@ -809,13 +879,20 @@ export const StatsTable: React.FC<StatsTableProps> = ({
               {displayedStats.map((stat, idx) => {
                 const isSelected = selectedNumbers.includes(stat.number);
                 const isTopTarget = idx < topTargetCount;
+                const rowBgColor = isSelected
+                  ? game === 'primitiva'
+                    ? 'bg-emerald-50'
+                    : game === 'bonoloto'
+                    ? 'bg-blue-50'
+                    : 'bg-amber-50'
+                  : 'bg-white';
 
                 return (
                   <tr
                     key={stat.number}
                     id={`stat-row-${stat.number}`}
                     onClick={() => onToggleNumber(stat.number)}
-                    className={`cursor-pointer transition-colors ${
+                    className={`group cursor-pointer transition-colors ${
                       isSelected
                         ? game === 'primitiva'
                           ? 'bg-emerald-50/80 font-medium'
@@ -827,8 +904,11 @@ export const StatsTable: React.FC<StatsTableProps> = ({
                         : 'hover:bg-slate-50/70 text-slate-600'
                     }`}
                   >
-                    {/* Checkbox */}
-                    <td className="py-2.5 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                    {/* Checkbox (Sticky Left) */}
+                    <td
+                      className={`py-2.5 px-3 w-12 min-w-[48px] max-w-[48px] text-center sticky left-0 z-20 ${rowBgColor} group-hover:bg-slate-50 shadow-[1px_0_0_0_#e2e8f0] transition-colors`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <button
                         type="button"
                         onClick={() => onToggleNumber(stat.number)}
@@ -846,8 +926,10 @@ export const StatsTable: React.FC<StatsTableProps> = ({
                       </button>
                     </td>
 
-                    {/* Rank */}
-                    <td className="py-2.5 px-3 text-center font-mono font-bold">
+                    {/* Rank (Sticky Left) */}
+                    <td
+                      className={`py-2.5 px-3 w-12 min-w-[48px] max-w-[48px] text-center font-mono font-bold sticky left-12 z-20 ${rowBgColor} group-hover:bg-slate-50 shadow-[1px_0_0_0_#e2e8f0] transition-colors`}
+                    >
                       {idx === 0 ? (
                         <span
                           className={`inline-flex items-center justify-center w-6 h-6 rounded-full font-black text-xs shadow-xs border ${
@@ -873,8 +955,10 @@ export const StatsTable: React.FC<StatsTableProps> = ({
                       )}
                     </td>
 
-                    {/* Ball & Number */}
-                    <td className="py-2.5 px-3">
+                    {/* Ball & Number (Sticky Left) */}
+                    <td
+                      className={`py-2.5 px-3 min-w-[110px] sticky left-24 z-20 ${rowBgColor} group-hover:bg-slate-50 shadow-[3px_0_5px_-2px_rgba(0,0,0,0.12)] border-r border-slate-300/80 transition-colors`}
+                    >
                       <div className="flex items-center gap-2">
                         <div
                           className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs sm:text-sm shadow-xs border transition-all ${
@@ -938,11 +1022,29 @@ export const StatsTable: React.FC<StatsTableProps> = ({
                     {/* Day-by-day Breakdown */}
                     {drawDays.map((day) => {
                       const count = stat.byDay[day] || 0;
+                      const isDaySorted = sortMode === `day_${day}`;
                       return (
-                        <td key={day} className="py-2.5 px-2 text-center font-mono">
+                        <td
+                          key={day}
+                          className={`py-2.5 px-2 text-center font-mono transition-colors ${
+                            isDaySorted
+                              ? game === 'primitiva'
+                                ? 'bg-emerald-50 font-bold text-emerald-950 border-x border-emerald-200/80'
+                                : game === 'bonoloto'
+                                ? 'bg-blue-50 font-bold text-blue-950 border-x border-blue-200/80'
+                                : 'bg-amber-50 font-bold text-amber-950 border-x border-amber-200/80'
+                              : ''
+                          }`}
+                        >
                           <span
                             className={`inline-block px-2 py-0.5 rounded-md text-xs font-semibold ${
-                              count > 0
+                              isDaySorted
+                                ? game === 'primitiva'
+                                  ? 'bg-emerald-600 text-white font-bold shadow-2xs'
+                                  : game === 'bonoloto'
+                                  ? 'bg-blue-600 text-white font-bold shadow-2xs'
+                                  : 'bg-amber-400 text-slate-950 font-black shadow-2xs'
+                                : count > 0
                                 ? 'bg-slate-100 text-slate-800'
                                 : 'text-slate-300'
                             }`}
@@ -1018,16 +1120,16 @@ export const StatsTable: React.FC<StatsTableProps> = ({
         </div>
       ) : (
         /* Stars Table (for Euromillones) */
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs sm:text-sm">
+        <div className="overflow-x-auto relative">
+          <table className="w-full text-left border-collapse text-xs sm:text-sm min-w-[700px]">
             <thead>
               <tr className="bg-amber-50 text-amber-950 uppercase text-[11px] font-bold tracking-wider border-b border-amber-200">
-                <th className="py-3 px-3 w-12 text-center">Sel.</th>
-                <th className="py-3 px-3 w-14 text-center">Rank</th>
+                <th className="py-3 px-3 w-12 min-w-[48px] max-w-[48px] text-center sticky left-0 z-30 bg-amber-50 shadow-[1px_0_0_0_#fde68a]">Sel.</th>
+                <th className="py-3 px-3 w-12 min-w-[48px] max-w-[48px] text-center sticky left-12 z-30 bg-amber-50 shadow-[1px_0_0_0_#fde68a]">Rank</th>
                 <th
                   onClick={() => setSortMode('number')}
                   title="Click para ordenar correlativamente por estrella (1-12)"
-                  className="py-3 px-3 cursor-pointer hover:text-amber-900 transition select-none"
+                  className="py-3 px-3 min-w-[110px] cursor-pointer hover:text-amber-900 transition select-none sticky left-24 z-30 bg-amber-50 shadow-[3px_0_5px_-2px_rgba(0,0,0,0.12)] border-r border-amber-300"
                 >
                   <div className="flex items-center gap-1 select-none pointer-events-none">
                     <span>Estrella</span>
@@ -1035,7 +1137,7 @@ export const StatsTable: React.FC<StatsTableProps> = ({
                   </div>
                 </th>
                 <th
-                  onClick={() => setSortMode('frequency')}
+                  onClick={handleFrequencySort}
                   onMouseDown={(e) => e.preventDefault()}
                   title="Click para ordenar por Total Veces (todos los días)"
                   className={`py-3 px-3 text-center border-x font-black transition cursor-pointer select-none ${
@@ -1054,7 +1156,7 @@ export const StatsTable: React.FC<StatsTableProps> = ({
                   return (
                     <th
                       key={day}
-                      onClick={() => setSortMode(isDayActive ? 'frequency' : `day_${day}`)}
+                      onClick={() => handleSelectDaySort(day)}
                       onMouseDown={(e) => e.preventDefault()}
                       title={`Click para ordenar por apariciones de los sorteos del ${day}`}
                       className={`py-3 px-2 text-center font-semibold transition cursor-pointer select-none ${
@@ -1095,13 +1197,14 @@ export const StatsTable: React.FC<StatsTableProps> = ({
               {(sortedStarStats || []).map((stat, idx) => {
                 const isSelected = selectedStars.includes(stat.number);
                 const isTop5 = idx < 5;
+                const starRowBg = isSelected ? 'bg-amber-100/90' : 'bg-white';
 
                 return (
                   <tr
                     key={stat.number}
                     id={`stat-star-row-${stat.number}`}
                     onClick={() => onToggleStar(stat.number)}
-                    className={`cursor-pointer transition-colors ${
+                    className={`group cursor-pointer transition-colors ${
                       isSelected
                         ? 'bg-amber-100/70 font-medium'
                         : isTop5
@@ -1109,7 +1212,10 @@ export const StatsTable: React.FC<StatsTableProps> = ({
                         : 'hover:bg-slate-50 text-slate-600'
                     }`}
                   >
-                    <td className="py-2.5 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                    <td
+                      className={`py-2.5 px-3 w-12 min-w-[48px] max-w-[48px] text-center sticky left-0 z-20 ${starRowBg} group-hover:bg-amber-50/60 shadow-[1px_0_0_0_#fde68a] transition-colors`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <button
                         type="button"
                         onClick={() => onToggleStar(stat.number)}
@@ -1123,11 +1229,15 @@ export const StatsTable: React.FC<StatsTableProps> = ({
                       </button>
                     </td>
 
-                    <td className="py-2.5 px-3 text-center font-mono font-bold">
+                    <td
+                      className={`py-2.5 px-3 w-12 min-w-[48px] max-w-[48px] text-center font-mono font-bold sticky left-12 z-20 ${starRowBg} group-hover:bg-amber-50/60 shadow-[1px_0_0_0_#fde68a] transition-colors`}
+                    >
                       <span className="text-slate-500 text-xs">#{idx + 1}</span>
                     </td>
 
-                    <td className="py-2.5 px-3">
+                    <td
+                      className={`py-2.5 px-3 min-w-[110px] sticky left-24 z-20 ${starRowBg} group-hover:bg-amber-50/60 shadow-[3px_0_5px_-2px_rgba(0,0,0,0.12)] border-r border-amber-300 transition-colors`}
+                    >
                       <div className="flex items-center gap-2">
                         <div
                           className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs sm:text-sm shadow-xs border transition-all ${
@@ -1157,9 +1267,21 @@ export const StatsTable: React.FC<StatsTableProps> = ({
 
                     {drawDays.map((day) => {
                       const count = stat.byDay[day] || 0;
+                      const isDaySorted = sortMode === `day_${day}`;
                       return (
-                        <td key={day} className="py-2.5 px-2 text-center font-mono">
-                          <span className="inline-block px-2 py-0.5 rounded-md text-xs font-semibold bg-slate-100 text-slate-800">
+                        <td
+                          key={day}
+                          className={`py-2.5 px-2 text-center font-mono transition-colors ${
+                            isDaySorted ? 'bg-amber-50 font-bold border-x border-amber-200' : ''
+                          }`}
+                        >
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded-md text-xs font-semibold ${
+                              isDaySorted
+                                ? 'bg-amber-400 text-slate-950 font-black shadow-2xs'
+                                : 'bg-slate-100 text-slate-800'
+                            }`}
+                          >
                             {count}
                           </span>
                         </td>

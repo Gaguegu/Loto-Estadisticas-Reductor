@@ -343,7 +343,15 @@ export default function App() {
     setSelectedStars(chosen);
   };
 
-  const handleSelectTopN = (count: number) => {
+  const handleSelectTopN = (count: number, specificNumbers?: number[]) => {
+    if (specificNumbers && specificNumbers.length > 0) {
+      setSelectedNumbers(specificNumbers.slice(0, count));
+      if (activeGame === 'euromillones') {
+        const starCount = selectedStars.length >= 2 && selectedStars.length <= 5 ? selectedStars.length : 5;
+        setSelectedStars(selectByCriterion(starStats, starCount, 'frequency'));
+      }
+      return;
+    }
     setSelectionCriterion('frequency');
     const top = selectByCriterion(numberStats, count, 'frequency');
     setSelectedNumbers(top);
