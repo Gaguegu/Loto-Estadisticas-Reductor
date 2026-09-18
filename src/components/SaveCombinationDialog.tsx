@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { GameType, ReductionGuarantee } from '../types';
+import React, { useState, useEffect } from 'react';
+import { GameType, ReductionGuarantee, GeneratedColumn } from '../types';
 import { saveCombination } from '../utils/savedCombinations';
 import { FolderPlus, X, Check, Layers, Coins } from 'lucide-react';
 
@@ -14,6 +14,8 @@ interface SaveCombinationDialogProps {
   columnsCount: number;
   totalCost: number;
   pricePerBet: number;
+  columns?: GeneratedColumn[];
+  columnReintegros?: Record<number, number | undefined>;
 }
 
 export const SaveCombinationDialog: React.FC<SaveCombinationDialogProps> = ({
@@ -27,13 +29,25 @@ export const SaveCombinationDialog: React.FC<SaveCombinationDialogProps> = ({
   columnsCount,
   totalCost,
   pricePerBet,
+  columns,
+  columnReintegros,
 }) => {
-  const [name, setName] = useState(() => {
+  const getDefaultName = () => {
     const gameName = game === 'primitiva' ? 'Primitiva' : game === 'bonoloto' ? 'Bonoloto' : 'Euromillones';
     const numCount = selectedNumbers.length;
     return `Peña ${gameName} - ${numCount} Números`;
-  });
+  };
+
+  const [name, setName] = useState(getDefaultName);
   const [notes, setNotes] = useState('');
+
+  // Always reset fields to a clean state with a fresh default name whenever the modal is opened
+  useEffect(() => {
+    if (isOpen) {
+      setName(getDefaultName());
+      setNotes('');
+    }
+  }, [isOpen, game, selectedNumbers.length]);
 
   if (!isOpen) return null;
 
@@ -51,6 +65,8 @@ export const SaveCombinationDialog: React.FC<SaveCombinationDialogProps> = ({
       totalCost,
       pricePerBet,
       notes: notes.trim() || undefined,
+      savedColumns: columns,
+      columnReintegros: columnReintegros,
     });
 
     onSaved(name.trim());

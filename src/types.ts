@@ -41,6 +41,8 @@ export interface SavedCombination {
   pricePerBet: number;
   createdAt: string; // ISO date
   notes?: string;
+  savedColumns?: GeneratedColumn[];
+  columnReintegros?: Record<number, number | undefined>;
 }
 
 export type ReductionGuarantee = 'direct' | 'guarantee_5' | 'guarantee_4' | 'guarantee_3';

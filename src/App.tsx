@@ -248,9 +248,15 @@ export default function App() {
 
   // Automatically initialize selected numbers with Top N on game change or when selection is empty
   const prevGameRef = useRef(activeGame);
+  const isLoadingCombinationRef = useRef(false);
   useEffect(() => {
     const gameChanged = prevGameRef.current !== activeGame;
     prevGameRef.current = activeGame;
+
+    if (isLoadingCombinationRef.current) {
+      isLoadingCombinationRef.current = false;
+      return;
+    }
 
     if (gameChanged || selectedNumbers.length === 0) {
       const targetCount = activeGame === 'euromillones' ? 10 : 12;
@@ -498,21 +504,51 @@ export default function App() {
     }
   };
 
-  const handleLoadCombination = (combo: SavedCombination) => {
+  const handleLoadCombination = (combo: SavedCombination, autoScrutinize: boolean = false) => {
+    isLoadingCombinationRef.current = true;
+    prevGameRef.current = combo.game;
+
     setActiveGame(combo.game);
     setSelectedNumbers(combo.selectedNumbers);
     setSelectedStars(combo.selectedStars || []);
     setGuarantee(combo.guarantee);
 
-    // Auto-generate reduction result with this combination
-    const currentPrice = gamePrices[combo.game] || DEFAULT_PRICES[combo.game];
-    const result = generateReducedColumns(
+    // Auto-generate reduction result with this combination, but preserve savedColumns if present
+    const currentPrice = combo.pricePerBet || gamePrices[combo.game] || DEFAULT_PRICES[combo.game];
+    let result = generateReducedColumns(
       combo.selectedNumbers,
       combo.game,
       combo.guarantee,
       combo.selectedStars,
       currentPrice
     );
+
+    if (combo.savedColumns && combo.savedColumns.length > 0) {
+      result = {
+        ...result,
+        columns: combo.savedColumns.map((col) => ({
+          ...col,
+          reintegro:
+            combo.columnReintegros && col.id in combo.columnReintegros
+              ? combo.columnReintegros[col.id]
+              : col.reintegro,
+        })),
+        columnsCount: combo.savedColumns.length,
+        totalCost: combo.totalCost || combo.savedColumns.length * currentPrice,
+      };
+    } else if (combo.columnReintegros) {
+      result = {
+        ...result,
+        columns: result.columns.map((col) => ({
+          ...col,
+          reintegro:
+            combo.columnReintegros && col.id in combo.columnReintegros
+              ? combo.columnReintegros[col.id]
+              : col.reintegro,
+        })),
+      };
+    }
+
     setReductionResult(result);
     setIsSavedCombinationsModalOpen(false);
 
@@ -525,6 +561,13 @@ export default function App() {
     setTimeout(() => setSyncToast(null), 4000);
 
     setTimeout(() => {
+      if (autoScrutinize) {
+        const scrutinizerEl = document.getElementById('scrutinizer-section');
+        if (scrutinizerEl) {
+          scrutinizerEl.scrollIntoView({ behavior: 'smooth' });
+          return;
+        }
+      }
       columnsRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 150);
   };

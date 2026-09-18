@@ -1468,6 +1468,8 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
         columnsCount={result.columnsCount}
         totalCost={result.totalCost}
         pricePerBet={result.pricePerBet}
+        columns={result.columns}
+        columnReintegros={columnReintegros}
       />
 
       {/* Print / Save in PDF Modal */}
@@ -1692,7 +1694,7 @@ export const ColumnsViewer: React.FC<ColumnsViewerProps> = ({
       {/* ========================================================================= */}
       {/* ESCRUTADOR Y COMPROBADOR DE SORTEOS (AUTOMÁTICO / MANUAL) */}
       {/* ========================================================================= */}
-      <div className="border-b border-slate-200 bg-slate-50/80 p-4 sm:p-5">
+      <div id="scrutinizer-section" className="border-b border-slate-200 bg-slate-50/80 p-4 sm:p-5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-3">
           <div className="flex items-center gap-2.5">
             <div
