@@ -4,6 +4,121 @@ import { LotteryDraw } from '../types';
 
 export const OFFICIAL_HISTORICAL_DRAWS: LotteryDraw[] = [
   {
+    "id": "pr-2026-09-19",
+    "game": "primitiva",
+    "date": "2026-09-19",
+    "dayOfWeek": "Sábado",
+    "numbers": [
+      7,
+      10,
+      40,
+      44,
+      45,
+      46
+    ],
+    "complementario": 19,
+    "reintegro": 4,
+    "joker": "8810028"
+  },
+  {
+    "id": "bn-2026-09-19",
+    "game": "bonoloto",
+    "date": "2026-09-19",
+    "dayOfWeek": "Sábado",
+    "numbers": [
+      16,
+      20,
+      23,
+      24,
+      41,
+      49
+    ],
+    "complementario": 32,
+    "reintegro": 1
+  },
+  {
+    "id": "em-2026-09-18",
+    "game": "euromillones",
+    "date": "2026-09-18",
+    "dayOfWeek": "Viernes",
+    "numbers": [
+      8,
+      17,
+      25,
+      30,
+      44
+    ],
+    "stars": [
+      2,
+      3
+    ]
+  },
+  {
+    "id": "bn-2026-09-18",
+    "game": "bonoloto",
+    "date": "2026-09-18",
+    "dayOfWeek": "Viernes",
+    "numbers": [
+      1,
+      3,
+      5,
+      9,
+      18,
+      45
+    ],
+    "complementario": 46,
+    "reintegro": 6
+  },
+  {
+    "id": "pr-2026-09-17",
+    "game": "primitiva",
+    "date": "2026-09-17",
+    "dayOfWeek": "Jueves",
+    "numbers": [
+      19,
+      20,
+      24,
+      25,
+      43,
+      46
+    ],
+    "complementario": 47,
+    "reintegro": 8,
+    "joker": "1024255"
+  },
+  {
+    "id": "bn-2026-09-17",
+    "game": "bonoloto",
+    "date": "2026-09-17",
+    "dayOfWeek": "Jueves",
+    "numbers": [
+      3,
+      6,
+      18,
+      20,
+      22,
+      43
+    ],
+    "complementario": 7,
+    "reintegro": 0
+  },
+  {
+    "id": "bn-2026-09-16",
+    "game": "bonoloto",
+    "date": "2026-09-16",
+    "dayOfWeek": "Miércoles",
+    "numbers": [
+      1,
+      5,
+      7,
+      28,
+      29,
+      38
+    ],
+    "complementario": 21,
+    "reintegro": 2
+  },
+  {
     "id": "em-2026-09-15",
     "game": "euromillones",
     "date": "2026-09-15",
