@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { GameType, SavedCombination } from '../types';
 import {
   getSavedCombinations,
@@ -17,6 +17,7 @@ import {
   Upload,
   Coins,
   CheckCircle2,
+  ArrowUp,
 } from 'lucide-react';
 import { downloadBlob } from '../utils/fileDownloader';
 
@@ -38,6 +39,19 @@ export const SavedCombinationsModal: React.FC<SavedCombinationsModalProps> = ({
   const [combinations, setCombinations] = useState<SavedCombination[]>(() => getSavedCombinations());
   const [filterGame, setFilterGame] = useState<GameType | 'all'>('all');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // Lock background body scrolling when modal is open to prevent touch scroll hijacking on mobile
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isOpen]);
 
   // Reload saved combinations from storage every time the modal is opened
   useEffect(() => {
@@ -47,6 +61,26 @@ export const SavedCombinationsModal: React.FC<SavedCombinationsModalProps> = ({
       onCountChange?.(fresh.length);
     }
   }, [isOpen, onCountChange]);
+
+  // Automatically scroll back to top whenever filter category changes
+  useEffect(() => {
+    if (listRef.current) {
+      listRef.current.scrollTop = 0;
+      setShowScrollTop(false);
+    }
+  }, [filterGame]);
+
+  const handleScroll = () => {
+    if (listRef.current) {
+      setShowScrollTop(listRef.current.scrollTop > 80);
+    }
+  };
+
+  const scrollToTop = () => {
+    if (listRef.current) {
+      listRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -216,7 +250,12 @@ export const SavedCombinationsModal: React.FC<SavedCombinationsModalProps> = ({
         )}
 
         {/* Combination Cards List */}
-        <div className="p-6 overflow-y-auto flex-1 space-y-3 bg-slate-100/50">
+        <div
+          ref={listRef}
+          onScroll={handleScroll}
+          className="p-3 sm:p-6 overflow-y-auto flex-1 space-y-3 bg-slate-100/50 overscroll-contain touch-pan-y relative"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
           {filtered.length === 0 ? (
             <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-300 p-8">
               <div className="w-16 h-16 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
@@ -355,18 +394,46 @@ export const SavedCombinationsModal: React.FC<SavedCombinationsModalProps> = ({
               );
             })
           )}
+
+          {/* Quick Floating Scroll-to-Top Button for mobile */}
+          {showScrollTop && (
+            <div className="sticky bottom-2 inset-x-0 flex justify-center z-30 pointer-events-none py-1">
+              <button
+                type="button"
+                onClick={scrollToTop}
+                className="pointer-events-auto inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-slate-900/95 hover:bg-slate-900 active:bg-black text-white text-xs font-bold shadow-xl border border-slate-700/60 backdrop-blur-md transition-all active:scale-95 cursor-pointer animate-in fade-in zoom-in-95 duration-150"
+                title="Volver arriba para ver filtros y combinaciones superiores"
+              >
+                <ArrowUp className="w-3.5 h-3.5 text-amber-400" />
+                <span>Volver arriba</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Modal Footer */}
         <div className="bg-white border-t border-slate-200 px-4 sm:px-6 py-3 flex items-center justify-between text-xs text-slate-500 shrink-0">
           <span className="hidden sm:inline">Las combinaciones se guardan localmente en tu navegador de forma segura.</span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-6 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-950 text-white font-bold transition cursor-pointer ml-auto text-xs sm:text-sm shadow-sm active:scale-95"
-          >
-            Cerrar
-          </button>
+          <div className="flex items-center gap-2 ml-auto">
+            {showScrollTop && (
+              <button
+                type="button"
+                onClick={scrollToTop}
+                className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-bold transition flex items-center gap-1.5 cursor-pointer text-xs"
+                title="Volver arriba"
+              >
+                <ArrowUp className="w-3.5 h-3.5 text-amber-600" />
+                <span>Arriba</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-6 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-950 text-white font-bold transition cursor-pointer text-xs sm:text-sm shadow-sm active:scale-95"
+            >
+              Cerrar
+            </button>
+          </div>
         </div>
       </div>
     </div>

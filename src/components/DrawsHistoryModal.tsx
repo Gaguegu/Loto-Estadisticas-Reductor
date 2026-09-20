@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { LotteryDraw, GameType } from '../types';
 import {
   X,
@@ -66,6 +66,17 @@ export const DrawsHistoryModal: React.FC<DrawsHistoryModalProps> = ({
   const [errorMessage, setErrorMessage] = useState('');
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Lock body scrolling when modal is open to prevent touch scroll conflicts on mobile
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -480,7 +491,10 @@ export const DrawsHistoryModal: React.FC<DrawsHistoryModalProps> = ({
         )}
 
         {/* List of Draws */}
-        <div className="overflow-y-auto flex-1 p-4 divide-y divide-slate-100">
+        <div
+          className="overflow-y-auto flex-1 p-4 divide-y divide-slate-100 overscroll-contain touch-pan-y"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
           {gameDraws.map((d) => (
             <div key={d.id} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
               <div>
