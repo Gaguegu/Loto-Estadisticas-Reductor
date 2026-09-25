@@ -1,8 +1,139 @@
-// Official Historical Draws Database from Loterías y Apuestas del Estado (SELAE)
-// Contains complete verified draws for 2025 and 2026 for La Primitiva, Bonoloto, and Euromillones
+// Official Historical Draws Database from Loterías y Apuestas del Estado (SELAE) & Lotoideas
+// Optimizado para los 2 últimos años (2025 y 2026) para máxima velocidad y ligereza (<300 KB)
 import { LotteryDraw } from '../types';
 
 export const OFFICIAL_HISTORICAL_DRAWS: LotteryDraw[] = [
+  {
+    "id": "pr-2026-09-24",
+    "game": "primitiva",
+    "date": "2026-09-24",
+    "dayOfWeek": "Jueves",
+    "numbers": [
+      6,
+      9,
+      21,
+      32,
+      38,
+      45
+    ],
+    "complementario": 28,
+    "reintegro": 9,
+    "joker": "7206235"
+  },
+  {
+    "id": "bn-2026-09-24",
+    "game": "bonoloto",
+    "date": "2026-09-24",
+    "dayOfWeek": "Jueves",
+    "numbers": [
+      1,
+      11,
+      16,
+      22,
+      43,
+      44
+    ],
+    "complementario": 4,
+    "reintegro": 0
+  },
+  {
+    "id": "bn-2026-09-23",
+    "game": "bonoloto",
+    "date": "2026-09-23",
+    "dayOfWeek": "Miércoles",
+    "numbers": [
+      11,
+      23,
+      28,
+      34,
+      37,
+      46
+    ],
+    "complementario": 30,
+    "reintegro": 3
+  },
+  {
+    "id": "em-2026-09-22",
+    "game": "euromillones",
+    "date": "2026-09-22",
+    "dayOfWeek": "Martes",
+    "numbers": [
+      13,
+      14,
+      16,
+      44,
+      50
+    ],
+    "stars": [
+      10,
+      12
+    ]
+  },
+  {
+    "id": "bn-2026-09-22",
+    "game": "bonoloto",
+    "date": "2026-09-22",
+    "dayOfWeek": "Martes",
+    "numbers": [
+      10,
+      17,
+      26,
+      34,
+      35,
+      43
+    ],
+    "complementario": 19,
+    "reintegro": 2
+  },
+  {
+    "id": "pr-2026-09-21",
+    "game": "primitiva",
+    "date": "2026-09-21",
+    "dayOfWeek": "Lunes",
+    "numbers": [
+      1,
+      4,
+      20,
+      34,
+      36,
+      37
+    ],
+    "complementario": 18,
+    "reintegro": 1,
+    "joker": "1147192"
+  },
+  {
+    "id": "bn-2026-09-21",
+    "game": "bonoloto",
+    "date": "2026-09-21",
+    "dayOfWeek": "Lunes",
+    "numbers": [
+      8,
+      10,
+      14,
+      21,
+      34,
+      44
+    ],
+    "complementario": 41,
+    "reintegro": 1
+  },
+  {
+    "id": "bn-2026-09-20",
+    "game": "bonoloto",
+    "date": "2026-09-20",
+    "dayOfWeek": "Domingo",
+    "numbers": [
+      2,
+      11,
+      33,
+      39,
+      43,
+      48
+    ],
+    "complementario": 46,
+    "reintegro": 4
+  },
   {
     "id": "pr-2026-09-19",
     "game": "primitiva",
@@ -1972,23 +2103,6 @@ export const OFFICIAL_HISTORICAL_DRAWS: LotteryDraw[] = [
     ],
     "complementario": 10,
     "reintegro": 5
-  },
-  {
-    "id": "pr-2026-07-11",
-    "game": "primitiva",
-    "date": "2026-07-11",
-    "dayOfWeek": "Sábado",
-    "numbers": [
-      12,
-      17,
-      20,
-      24,
-      27,
-      34
-    ],
-    "complementario": 41,
-    "reintegro": 0,
-    "joker": "1933915"
   },
   {
     "id": "bn-2026-07-11",
@@ -7751,23 +7865,6 @@ export const OFFICIAL_HISTORICAL_DRAWS: LotteryDraw[] = [
     ],
     "complementario": 23,
     "reintegro": 7
-  },
-  {
-    "id": "pr-2025-12-18",
-    "game": "primitiva",
-    "date": "2025-12-18",
-    "dayOfWeek": "Jueves",
-    "numbers": [
-      8,
-      12,
-      21,
-      23,
-      27,
-      43
-    ],
-    "complementario": 47,
-    "reintegro": 2,
-    "joker": "1807401"
   },
   {
     "id": "bn-2025-12-18",

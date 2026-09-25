@@ -115,7 +115,12 @@ export function getStoredDraws(): LotteryDraw[] {
     if (data) {
       const parsed: LotteryDraw[] = JSON.parse(data);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        const cleaned = sanitizeDraws(parsed);
+        // Filtrar y purgar cualquier sorteo anterior a los 2 últimos años (2025+) para mantener la app ligera y rápida
+        const recentOnly = parsed.filter((d) => {
+          const y = parseInt(d.date.substring(0, 4), 10);
+          return isNaN(y) || y >= 2025;
+        });
+        const cleaned = sanitizeDraws(recentOnly);
         
         // Map of verified official seed draws to ensure verified results always take precedence
         const verifiedMap = new Map<string, LotteryDraw>(

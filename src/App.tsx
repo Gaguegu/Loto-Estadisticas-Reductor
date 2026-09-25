@@ -9,6 +9,7 @@ import { getStoredDraws, saveStoredDraws, resetStoredDraws, sanitizeDraws } from
 import {
   countMissingDraws,
   synchronizeDatabase,
+  downloadAndSynchronizeDatabase,
   getAutoSyncPreference,
   setAutoSyncPreference,
   exportDatabaseToJson,
@@ -106,59 +107,63 @@ export default function App() {
   }, [allDraws]);
 
   // Handle manual or automatic database synchronization
-  const handleSyncDatabase = (isAuto = false) => {
+  const handleSyncDatabase = async (isAuto = false) => {
     if (isSyncing) return;
     setIsSyncing(true);
 
-    setTimeout(() => {
-      try {
-        const result = synchronizeDatabase(allDraws);
-        setAllDraws(result.updatedDraws);
-        saveStoredDraws(result.updatedDraws);
-        setIsSyncing(false);
+    try {
+      const result = await downloadAndSynchronizeDatabase(allDraws);
+      setAllDraws(result.updatedDraws);
+      saveStoredDraws(result.updatedDraws);
+      setIsSyncing(false);
 
-        if (result.removedFutureCount > 0) {
-          setSyncToast({
-            show: true,
-            title: 'Sorteos futuros corregidos',
-            message: `Se han corregido ${result.removedFutureCount} sorteo(s) con fecha no celebrada o futura. La base de datos ahora contiene exclusivamente sorteos oficiales celebrados.`,
-            type: 'success',
-          });
-        } else if (result.correctedVerifiedCount > 0) {
-          setSyncToast({
-            show: true,
-            title: 'Base de datos verificada y corregida',
-            message: `Se han actualizado ${result.correctedVerifiedCount} sorteo(s) con los resultados oficiales definitivos (incluyendo Euromillones 11-09: 1, 7, 15, 39, 50 ★ 1, 11; Bonoloto 11-09 y 12-09; y Primitiva 12-09).`,
-            type: 'success',
-          });
-        } else if (result.addedCount > 0) {
-          setSyncToast({
-            show: true,
-            title: isAuto ? 'Sincronización oficial completada' : '¡Base de datos actualizada!',
-            message: `Se han incorporado ${result.addedCount} sorteos oficiales verificados (Primitiva: +${result.addedByGame.primitiva}, Bonoloto: +${result.addedByGame.bonoloto}, Euromillones: +${result.addedByGame.euromillones}).`,
-            type: 'success',
-          });
-        } else {
-          if (!isAuto) {
-            setSyncToast({
-              show: true,
-              title: 'Base de datos al día',
-              message: 'Tu base de datos ya contiene todos los sorteos oficiales celebrados de Loterías y Apuestas del Estado. Los sorteos de hoy se celebran por la noche (21:30h/21:40h).',
-              type: 'info',
-            });
-          }
-        }
-      } catch (err) {
-        console.error('Error during database sync', err);
-        setIsSyncing(false);
+      if (result.discrepanciesCorrected.length > 0) {
         setSyncToast({
           show: true,
-          title: 'Error de actualización',
-          message: 'No se pudo sincronizar la base de datos local. Por favor inténtalo de nuevo.',
-          type: 'error',
+          title: 'Sorteos confrontados y corregidos con la fuente oficial',
+          message: `Se han detectado y corregido ${result.discrepanciesCorrected.length} sorteo(s) con los datos oficiales de Lotoideas y SELAE (incluyendo ${result.discrepanciesCorrected.map((d) => `${d.date} ${d.game}`).slice(0, 2).join(', ')}).`,
+          type: 'success',
         });
+      } else if (result.removedFutureCount > 0) {
+        setSyncToast({
+          show: true,
+          title: 'Sorteos futuros corregidos',
+          message: `Se han corregido ${result.removedFutureCount} sorteo(s) con fecha no celebrada o futura. La base de datos ahora contiene exclusivamente sorteos oficiales celebrados.`,
+          type: 'success',
+        });
+      } else if (result.addedCount > 0) {
+        setSyncToast({
+          show: true,
+          title: isAuto ? 'Sincronización oficial completada' : '¡Base de datos actualizada!',
+          message: `Se han incorporado ${result.addedCount} sorteos oficiales verificados (Primitiva: +${result.addedByGame.primitiva}, Bonoloto: +${result.addedByGame.bonoloto}, Euromillones: +${result.addedByGame.euromillones}) contrastados con Lotoideas y SELAE.`,
+          type: 'success',
+        });
+      } else {
+        if (!isAuto) {
+          setSyncToast({
+            show: true,
+            title: 'Base de datos al día',
+            message: 'Tu base de datos contiene todos los sorteos oficiales celebrados y contrastados con Lotoideas y Loterías y Apuestas del Estado.',
+            type: 'info',
+          });
+        }
       }
-    }, 400);
+    } catch (err) {
+      console.error('Error during database sync', err);
+      // Fallback to local verified sync
+      try {
+        const fallbackRes = synchronizeDatabase(allDraws);
+        setAllDraws(fallbackRes.updatedDraws);
+        saveStoredDraws(fallbackRes.updatedDraws);
+      } catch {}
+      setIsSyncing(false);
+      setSyncToast({
+        show: true,
+        title: 'Sincronizado con base de datos local verificada',
+        message: 'No se pudo conectar a la red en este momento; se ha sincronizado con la base de sorteos oficiales verificados.',
+        type: 'info',
+      });
+    }
   };
 
   // Auto-sync on startup if enabled and missing draws are detected

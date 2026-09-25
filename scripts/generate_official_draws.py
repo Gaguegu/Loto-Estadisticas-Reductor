@@ -14,6 +14,9 @@ def parse_line(line, game):
     if len(date_parts) != 3:
         return None
     d, m, y = int(date_parts[0]), int(date_parts[1]), int(date_parts[2])
+    # Filter strictly to the last 2 years (2025 and 2026) for optimal size (<300 KB) and performance
+    if y < 2025:
+        return None
     iso_date = f'{y:04d}-{m:02d}-{d:02d}'
     dt = datetime(y, m, d)
     day_name = SPANISH_DAYS[dt.weekday()]
